@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '../utils/logger';
 
 // Environment variables validation
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
@@ -33,14 +34,14 @@ export const testConnection = async (): Promise<boolean> => {
     const { error } = await supabase.from('users').select('count').limit(1);
     
     if (error) {
-      console.error('Supabase connection test failed:', error.message);
+      logger.error('Supabase connection test failed:', error.message);
       return false;
     }
     
-    console.log('Supabase connection test successful');
+    logger.log('Supabase connection test successful');
     return true;
   } catch (error) {
-    console.error('Supabase connection test error:', error);
+    logger.error('Supabase connection test error:', error);
     return false;
   }
 };

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { AuthService, SignUpData, SignInData } from '../services/AuthService';
 import { UserProfile } from '../services/DatabaseService';
 import type { User, Session } from '@supabase/supabase-js';
+import { logger } from '../utils/logger';
 
 interface AuthState {
   session: Session | null;
@@ -68,12 +69,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Single auth state processor - the only source of truth
   const processAuthState = async (event: string, session: Session | null): Promise<void> => {
-    console.log(`[AuthContext] Processing event: ${event}, session: ${!!session}`);
+    logger.log(`[AuthContext] Processing event: ${event}, session: ${!!session}`);
 
     try {
       // Case 1: Sign out or no session
       if (event === 'SIGNED_OUT' || !session) {
-        console.log('[AuthContext] Clearing state (signed out or no session)');
+        logger.log('[AuthContext] Clearing state (signed out or no session)');
         clearCache();
         setState({
           session: null,
@@ -86,7 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Case 2: Token refresh - silent update only
       if (event === 'TOKEN_REFRESHED') {
-        console.log('[AuthContext] Token refreshed, updating session silently');
+        logger.log('[AuthContext] Token refreshed, updating session silently');
         setState(prev => ({
           ...prev,
           session,
@@ -98,11 +99,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Case 3: Sign in or initial session - load everything
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
         const user = session.user;
-        console.log(`[AuthContext] Processing sign in for user: ${user.id}`);
+        logger.log(`[AuthContext] Processing sign in for user: ${user.id}`);
 
         // Check email confirmation
         if (!user.email_confirmed_at) {
-          console.log('[AuthContext] Email not confirmed, staying in public area');
+          logger.log('[AuthContext] Email not confirmed, staying in public area');
           setState({
             session: null,
             user: null,
@@ -119,17 +120,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Try cache first
           if (isCacheValid(user.id)) {
             profile = getCachedProfile(user.id);
-            console.log('[AuthContext] Using cached profile');
+            logger.log('[AuthContext] Using cached profile');
           } else {
             // Fetch from database
-            console.log('[AuthContext] Fetching profile from database');
+            logger.log('[AuthContext] Fetching profile from database');
             const result = await AuthService.getUserProfile(user.id);
             profile = result.profile || null;
             setCacheProfile(user.id, profile);
-            console.log(`[AuthContext] Profile fetched: ${!!profile}`);
+            logger.log(`[AuthContext] Profile fetched: ${!!profile}`);
           }
         } catch (error) {
-          console.error('[AuthContext] Profile fetch failed, continuing with null:', error);
+          logger.error('[AuthContext] Profile fetch failed, continuing with null:', error);
           profile = null;
           setCacheProfile(user.id, null); // Cache null result to avoid repeated failures
         }
@@ -145,10 +146,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       // Unknown event - log and ignore
-      console.log(`[AuthContext] Ignoring unknown event: ${event}`);
+      logger.log(`[AuthContext] Ignoring unknown event: ${event}`);
     } catch (error) {
       // Critical: Always set loading to false on any error
-      console.error('[AuthContext] Error processing auth state:', error);
+      logger.error('[AuthContext] Error processing auth state:', error);
       setState(prev => ({
         ...prev,
         loading: false
@@ -158,12 +159,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Initialize auth - single useEffect with simple flow
   useEffect(() => {
-    console.log('[AuthContext] Initializing auth system...');
+    logger.log('[AuthContext] Initializing auth system...');
 
     // 1. Get initial session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
-        console.error('[AuthContext] Error getting initial session:', error);
+        logger.error('[AuthContext] Error getting initial session:', error);
         setState({
           session: null,
           user: null,
@@ -173,7 +174,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      console.log(`[AuthContext] Initial session found: ${!!session}`);
+      logger.log(`[AuthContext] Initial session found: ${!!session}`);
       processAuthState('INITIAL_SESSION', session);
     });
 
@@ -183,7 +184,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
 
     return () => {
-      console.log('[AuthContext] Cleaning up auth listener');
+      logger.log('[AuthContext] Cleaning up auth listener');
       subscription.unsubscribe();
     };
   }, []);
@@ -223,7 +224,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await AuthService.signOut();
       // onAuthStateChange will handle the state clearing
     } catch (error) {
-      console.error('[AuthContext] Sign out failed:', error);
+      logger.error('[AuthContext] Sign out failed:', error);
       // Force local cleanup if Supabase fails
       clearCache();
       setState({
@@ -267,7 +268,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!state.user) return;
 
     try {
-      console.log('[AuthContext] Manually refreshing profile, clearing cache...');
+      logger.log('[AuthContext] Manually refreshing profile, clearing cache...');
       
       // Clear cache to force fresh fetch
       clearCache();
@@ -280,9 +281,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setCacheProfile(state.user.id, profile);
       setState(prev => ({ ...prev, profile }));
       
-      console.log(`[AuthContext] Profile refreshed: ${!!profile}`);
+      logger.log(`[AuthContext] Profile refreshed: ${!!profile}`);
     } catch (error) {
-      console.error('[AuthContext] Failed to refresh profile:', error);
+      logger.error('[AuthContext] Failed to refresh profile:', error);
     }
   };
 
@@ -299,7 +300,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Debug logging - essential info only
-  console.log('[AuthContext] Current state:', {
+  logger.log('[AuthContext] Current state:', {
     session: !!state.session,
     user: !!state.user,
     profile: !!state.profile,

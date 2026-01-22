@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { logger } from '../utils/logger';
 
 export interface ImageUploadResult {
   success: boolean;
@@ -76,7 +77,7 @@ export class ProfileImageService {
         });
 
       if (error) {
-        console.error('Storage upload error:', error);
+        logger.error('Storage upload error:', error);
         return {
           success: false,
           error: 'Erro no upload. Tente novamente.'
@@ -100,7 +101,7 @@ export class ProfileImageService {
         url: urlData.publicUrl
       };
     } catch (error) {
-      console.error('Image upload error:', error);
+      logger.error('Image upload error:', error);
       return {
         success: false,
         error: 'Erro inesperado no upload.'
@@ -119,7 +120,7 @@ export class ProfileImageService {
         .list(userId);
 
       if (listError) {
-        console.error('Error listing files:', listError);
+        logger.error('Error listing files:', listError);
         return {
           success: false,
           error: 'Erro ao listar arquivos.'
@@ -138,7 +139,7 @@ export class ProfileImageService {
         .remove(filePaths);
 
       if (deleteError) {
-        console.error('Error deleting files:', deleteError);
+        logger.error('Error deleting files:', deleteError);
         return {
           success: false,
           error: 'Erro ao deletar imagem.'
@@ -147,7 +148,7 @@ export class ProfileImageService {
 
       return { success: true };
     } catch (error) {
-      console.error('Image deletion error:', error);
+      logger.error('Image deletion error:', error);
       return {
         success: false,
         error: 'Erro inesperado ao deletar imagem.'
@@ -220,7 +221,7 @@ export class ProfileImageService {
         .list('', { limit: 1 });
 
       if (error) {
-        console.error('Bucket access error:', error);
+        logger.error('Bucket access error:', error);
         return {
           accessible: false,
           error: 'Bucket não acessível.'
@@ -229,7 +230,7 @@ export class ProfileImageService {
 
       return { accessible: true };
     } catch (error) {
-      console.error('Bucket check error:', error);
+      logger.error('Bucket check error:', error);
       return {
         accessible: false,
         error: 'Erro ao verificar bucket.'

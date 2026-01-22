@@ -12,6 +12,9 @@ import ProfileSetupPage from './pages/ProfileSetupPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
 import MenusPage from './pages/MenusPage';
+import IngredientsPage from './pages/IngredientsPage';
+import PreparacoesPage from './pages/PreparacoesPage';
+import CardapiosPage from './pages/CardapiosPage';
 import UnderDevelopmentPage from './pages/UnderDevelopmentPage';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -77,7 +80,7 @@ const Dashboard: React.FC = () => {
       case 'home': return 'Painel Executivo de Nutrição';
       case 'shopping-list': return 'Lista de Compras e Suprimentos';
       case 'menus': return 'Gestão de Cardápios Escolares';
-      case 'preparations': return 'Fichas de Preparações Culinaristas';
+      case 'preparations': return 'Fichas de Preparações Culinárias';
       case 'ingredients': return 'Banco de Ingredientes';
       case 'stock': return 'Controle de Estoques';
       case 'settings': return 'Configurações do Sistema';
@@ -167,7 +170,9 @@ const Dashboard: React.FC = () => {
         >
           <Routes>
             <Route path="/" element={renderDashboard()} />
-            <Route path="/menus" element={<MenusPage />} />
+            <Route path="/menus" element={<CardapiosPage />} />
+            <Route path="/preparations" element={<PreparacoesPage />} />
+            <Route path="/ingredients" element={<IngredientsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/*" element={<UnderDevelopmentPage featureName={activeTab} />} />

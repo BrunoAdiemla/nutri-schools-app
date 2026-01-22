@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { DatabaseService, UserProfile } from './DatabaseService';
 import type { User, Session, AuthError } from '@supabase/supabase-js';
+import { logger } from '../utils/logger';
 
 export interface SignUpData {
   email: string;
@@ -39,7 +40,7 @@ export class AuthService {
       });
 
       if (authError) {
-        console.error('Auth signup error:', authError);
+        logger.error('Auth signup error:', authError);
         return { user: null, session: null, error: authError };
       }
 
@@ -49,7 +50,7 @@ export class AuthService {
       }
 
       // Don't create profile here - it will be created in ProfileSetupPage after email confirmation
-      console.log('User created in auth, profile will be created after email confirmation');
+      logger.log('User created in auth, profile will be created after email confirmation');
 
       return {
         user: authData.user,
@@ -57,7 +58,7 @@ export class AuthService {
         error: null
       };
     } catch (error) {
-      console.error('SignUp error:', error);
+      logger.error('SignUp error:', error);
       return {
         user: null,
         session: null,
@@ -77,7 +78,7 @@ export class AuthService {
       });
 
       if (authError) {
-        console.error('Auth signin error:', authError);
+        logger.error('Auth signin error:', authError);
         return { user: null, session: null, error: authError };
       }
 
@@ -87,7 +88,7 @@ export class AuthService {
         error: null
       };
     } catch (error) {
-      console.error('SignIn error:', error);
+      logger.error('SignIn error:', error);
       return {
         user: null,
         session: null,
@@ -102,13 +103,13 @@ export class AuthService {
       const { error } = await supabase.auth.signOut();
       
       if (error) {
-        console.error('SignOut error:', error);
+        logger.error('SignOut error:', error);
         return { error };
       }
 
       return { error: null };
     } catch (error) {
-      console.error('SignOut error:', error);
+      logger.error('SignOut error:', error);
       return { error: error as AuthError };
     }
   }
@@ -121,13 +122,13 @@ export class AuthService {
       });
 
       if (error) {
-        console.error('Password reset error:', error);
+        logger.error('Password reset error:', error);
         return { error };
       }
 
       return { error: null };
     } catch (error) {
-      console.error('Password reset error:', error);
+      logger.error('Password reset error:', error);
       return { error: error as AuthError };
     }
   }
@@ -140,13 +141,13 @@ export class AuthService {
       });
 
       if (error) {
-        console.error('Password update error:', error);
+        logger.error('Password update error:', error);
         return { error };
       }
 
       return { error: null };
     } catch (error) {
-      console.error('Password update error:', error);
+      logger.error('Password update error:', error);
       return { error: error as AuthError };
     }
   }
@@ -157,13 +158,13 @@ export class AuthService {
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
-        console.error('Get session error:', error);
+        logger.error('Get session error:', error);
         return { session: null, error };
       }
 
       return { session, error: null };
     } catch (error) {
-      console.error('Get session error:', error);
+      logger.error('Get session error:', error);
       return { session: null, error: error as AuthError };
     }
   }
@@ -174,13 +175,13 @@ export class AuthService {
       const { data: { user }, error } = await supabase.auth.getUser();
 
       if (error) {
-        console.error('Get user error:', error);
+        logger.error('Get user error:', error);
         return { user: null, error };
       }
 
       return { user, error: null };
     } catch (error) {
-      console.error('Get user error:', error);
+      logger.error('Get user error:', error);
       return { user: null, error: error as AuthError };
     }
   }
@@ -188,24 +189,24 @@ export class AuthService {
   // Get user profile
   static async getUserProfile(userId: string): Promise<{ profile: UserProfile | null; error: string | null }> {
     try {
-      console.log('🔍 AuthService.getUserProfile - Starting for userId:', userId);
+      logger.log('🔍 AuthService.getUserProfile - Starting for userId:', userId);
       
       const profile = await DatabaseService.getUserProfile(userId);
       
-      console.log('🔍 AuthService.getUserProfile - DatabaseService returned:', {
+      logger.log('🔍 AuthService.getUserProfile - DatabaseService returned:', {
         profileExists: !!profile,
         profileData: profile ? 'FOUND' : 'NULL'
       });
       
       if (!profile) {
-        console.log('📝 AuthService.getUserProfile - Returning null profile (user needs setup)');
+        logger.log('📝 AuthService.getUserProfile - Returning null profile (user needs setup)');
         return { profile: null, error: 'Profile not found' };
       }
 
-      console.log('✅ AuthService.getUserProfile - Returning profile successfully');
+      logger.log('✅ AuthService.getUserProfile - Returning profile successfully');
       return { profile, error: null };
     } catch (error) {
-      console.error('💥 AuthService.getUserProfile - Exception:', error);
+      logger.error('💥 AuthService.getUserProfile - Exception:', error);
       return { profile: null, error: 'Failed to fetch profile' };
     }
   }
@@ -259,13 +260,13 @@ export class AuthService {
       const { data, error } = await supabase.auth.refreshSession();
 
       if (error) {
-        console.error('Refresh session error:', error);
+        logger.error('Refresh session error:', error);
         return { session: null, error };
       }
 
       return { session: data.session, error: null };
     } catch (error) {
-      console.error('Refresh session error:', error);
+      logger.error('Refresh session error:', error);
       return { session: null, error: error as AuthError };
     }
   }

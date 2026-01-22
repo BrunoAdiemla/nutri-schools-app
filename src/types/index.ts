@@ -6,9 +6,24 @@ export enum MenuStatus {
   REJECTED = 'REJECTED'
 }
 
-export type PreparacaoTipo = 'sólido' | 'líquido' | 'frutas' | 'acompanhamento' | 'guarnição' | 'entrada' | 'sobremesa' | 'complemento';
+export type PreparacaoTipo = 'sólido' | 'líquido' | 'frutas' | 'acompanhamento' | 'guarnição' | 'salada' | 'prato principal' | 'sobremesa' | 'complemento';
 export type RefeicaoTipo = 'colação' | 'almoço' | 'lanche' | 'jantar';
 export type UserFuncao = 'nutricionista' | 'gestor' | 'outro';
+export type IngredienteTipo = 
+  | 'carnes-e-ovos'
+  | 'leites-e-derivados'
+  | 'leguminosas'
+  | 'cereais-e-derivados'
+  | 'tuberculos-e-raizes'
+  | 'hortalicas'
+  | 'oleos-gorduras-oleaginosas'
+  | 'acucares-e-doces'
+  | 'bebidas'
+  | 'condimentos-e-temperos'
+  | 'frutas'
+  | 'paes-e-biscoitos';
+
+export type UnidadeMedida = 'g' | 'kg' | 'ml' | 'l' | 'unidade' | 'xícara' | 'colher';
 
 // Legacy types (will be replaced with Supabase types)
 export interface MenuItem {
@@ -48,8 +63,9 @@ export interface UserProfile {
 export interface Ingrediente {
   id: string;
   nome: string;
-  unidade_medida: string;
-  calorias_por_unidade: number;
+  tipo?: IngredienteTipo;
+  unidade_medida: UnidadeMedida;
+  kcal_por_100g_ou_100ml: number;
   default_ingredient: boolean;
   created_by: string;
   created_at: string;
@@ -59,7 +75,8 @@ export interface Ingrediente {
 export interface Preparacao {
   id: string;
   nome: string;
-  valor_per_capita: number;
+  valor_per_capita?: number;
+  unidade_de_medida?: UnidadeMedida;
   modo_preparo?: string;
   tipo: PreparacaoTipo;
   refeicoes_presente: RefeicaoTipo[];
@@ -72,6 +89,17 @@ export interface Preparacao {
 export interface CardapiosDoDia {
   id: string;
   data: string; // ISO date string
+  cardapio_semanal_id?: string; // Reference to CardapioSemanal
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CardapioSemanal {
+  id: string;
+  nome: string;
+  data_inicio: string; // ISO date string
+  data_fim: string; // ISO date string
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -87,6 +115,89 @@ export interface Refeicao {
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface RefeicaoPreparacao {
+  id: string;
+  refeicao_id: string;
+  preparacao_id: string;
+  nome_exibicao?: string;
+  created_at: string;
+}
+
+// Types for Cardapio Creation Process
+export interface CardapioCreationData {
+  dateRange: {
+    startDate: Date;
+    endDate: Date;
+  };
+  generatedDays: Date[];
+  daysConfig: Record<number, DayConfig>;
+}
+
+export interface DayConfig {
+  isHoliday: boolean;
+  enabledMeals: {
+    colacao: boolean;
+    almoco: boolean;
+    lanche: boolean;
+    jantar: boolean;
+  };
+  meals: MealData;
+}
+
+export interface MealData {
+  colacao: MealConfig;
+  almoco: MealConfig;
+  lanche: MealConfig;
+  jantar: MealConfig;
+}
+
+export interface MealConfig {
+  // Preparações selecionadas (IDs das preparações)
+  solido?: string;
+  liquido?: string;
+  frutas?: string;
+  acompanhamento1?: string;
+  acompanhamento2?: string;
+  complemento?: string;
+  pratoPrincipal?: string;
+  guarnicao?: string;
+  salada?: string;
+  sobremesa?: string;
+  // Comensais
+  comensaisPequenos: number;
+  comensaisAdolescentes: number;
+  comensaisAdultos: number;
+}
+
+// Database creation payload types
+export interface CreateCardapioSemanalPayload {
+  nome: string;
+  data_inicio: string; // ISO date string
+  data_fim: string; // ISO date string
+  created_by: string;
+}
+
+export interface CreateCardapiosDoDiaPayload {
+  data: string; // ISO date string
+  cardapio_semanal_id: string;
+  created_by: string;
+}
+
+export interface CreateRefeicaoPayload {
+  tipo: RefeicaoTipo;
+  comensais_adultos: number;
+  comensais_adolescentes: number;
+  comensais_pequenos: number;
+  cardapio_id: string;
+  created_by: string;
+}
+
+export interface CreateRefeicaoPreparacaoPayload {
+  refeicao_id: string;
+  preparacao_id: string;
+  nome_exibicao?: string;
 }
 
 export interface ListaCompras {

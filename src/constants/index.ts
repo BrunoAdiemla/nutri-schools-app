@@ -2,7 +2,7 @@ export const NAV_ITEMS = [
   { id: 'home', label: 'Home', icon: 'Home' },
   { id: 'shopping-list', label: 'Lista de compras', icon: 'ShoppingCart' },
   { id: 'menus', label: 'Cardápios', icon: 'Utensils' },
-  { id: 'preparations', label: 'Preparações', icon: 'CookingPot' },
+  { id: 'preparations', label: 'Preparações', icon: 'ChefHat' },
   { id: 'ingredients', label: 'Ingredientes', icon: 'Apple' },
   { id: 'stock', label: 'Estoques', icon: 'Package' }, // NEW - Added as per requirements
 ];
@@ -26,6 +26,7 @@ export const SUPABASE_TABLES = {
   INGREDIENTES: 'ingredientes',
   PREPARACOES: 'preparacoes',
   INGREDIENTE_PREPARACAO: 'ingrediente_preparacao',
+  CARDAPIOS_SEMANAIS: 'cardapios_semanais',
   CARDAPIOS_DO_DIA: 'cardapios_do_dia',
   REFEICOES: 'refeicoes',
   REFEICAO_PREPARACOES: 'refeicao_preparacoes',
