@@ -1,5 +1,7 @@
 # PLANO DE TAREFAS: IMPLEMENTAÇÃO EDITAR CARDÁPIO
 
+> ⚠️ **ATUALIZAÇÃO IMPORTANTE**: Foi identificado que o carregamento em cascata já está implementado, mas os dados não aparecem nas abas dos dias. A **FASE 0** foi adicionada para corrigir este problema ANTES de implementar o salvamento.
+
 ## 📋 VISÃO GERAL
 
 Este documento define o plano de execução detalhado para implementar a funcionalidade de edição de cardápios, baseado nas especificações do documento `CARDAPIO_EDIT_SPECIFICATION.md`.
@@ -16,11 +18,20 @@ Este documento define o plano de execução detalhado para implementar a funcion
 ### ✅ **JÁ IMPLEMENTADO**
 - [x] Coluna `tipo` na tabela `refeicao_preparacoes`
 - [x] Estrutura básica do modo edição no `CardapioModal`
-- [x] Função `getCardapioCompleto()` no `DatabaseService`
-- [x] Carregamento e transformação de dados para edição
+- [x] Função `getCardapioCompleto()` no `DatabaseService` (carregamento em cascata completo)
+- [x] Função `loadCardapioData()` no `CardapioModal` (transformação de dados)
 - [x] Interface adaptada para modo edição (título, campos desabilitados)
 
+### ⚠️ **PROBLEMA IDENTIFICADO - CRÍTICO**
+- [ ] **Dados não aparecem nas abas dos dias** - Carregamento funciona mas exibição falha
+  - Carregamento em cascata está implementado e funcional
+  - Dados são buscados corretamente do banco (cardapios_semanais → cardapios_do_dia → refeicoes → refeicao_preparacoes)
+  - Transformação de dados está implementada
+  - **MAS**: Abas dos dias não exibem as informações carregadas
+  - **Causa**: A investigar (possível problema de formato de data, mapeamento ou timing)
+
 ### 🚧 **PENDENTE DE IMPLEMENTAÇÃO**
+- [ ] **FASE 0**: Debug e correção do carregamento/exibição (DEVE SER FEITO PRIMEIRO)
 - [ ] Função `updateCardapioCompleto()` no DatabaseService
 - [ ] Lógica de detecção de mudanças (diff)
 - [ ] Execução inteligente de operações (UPDATE/INSERT/DELETE)
@@ -32,8 +43,83 @@ Este documento define o plano de execução detalhado para implementar a funcion
 
 ## 🛠️ PLANO DE EXECUÇÃO
 
+### **FASE 0: DEBUG E CORREÇÃO DO CARREGAMENTO** ⚠️ **CRÍTICO**
+*Tempo estimado: 1-2 horas*
+
+> **IMPORTANTE**: Esta fase foi adicionada após identificar que o carregamento em cascata já está implementado, mas os dados não aparecem nas abas dos dias. Deve ser executada ANTES de implementar o salvamento.
+
+#### **Tarefa 0.1: Investigar Problema de Exibição nas Abas**
+- **Objetivo**: Identificar por que os dados carregados não aparecem nas abas dos dias
+- **Problema Reportado**: "O modal abre e carrega o cardapio semanal corretamente, as abas dos dias não apresenta as informações do cardapio do dia corretamente, aliás, não apresenta nada"
+- **Ações**:
+  - Adicionar console.logs detalhados na função `loadCardapioData()` do CardapioModal
+  - Verificar se `cardapioCompleto.cardapios_do_dia` está sendo retornado corretamente
+  - Verificar se o loop de transformação está processando todos os dias
+  - Verificar se `setDaysConfig()` está sendo chamado com dados corretos
+  - Inspecionar no console do navegador a estrutura de `daysConfig` após carregamento
+  - Verificar se `generatedDays` está sincronizado com os dias carregados
+  - Verificar formato de datas (ISO vs local) - possível incompatibilidade
+- **Possíveis Causas**:
+  - Formato de data incompatível entre banco e comparação (ex: "2025-01-15" vs "2025-01-15T00:00:00")
+  - IDs de preparações não correspondendo aos disponíveis nos dropdowns
+  - Estado `daysConfig` sendo sobrescrito ou não atualizado
+  - Problema de timing (render acontece antes dos dados serem processados)
+  - Mapeamento de tipo de refeição incorreto (colação vs colacao, almoço vs almoco)
+- **Critérios de Sucesso**:
+  - Identificar exatamente onde o fluxo de dados está falhando
+  - Documentar a causa raiz do problema
+  - Ter logs claros mostrando o estado dos dados em cada etapa
+
+#### **Tarefa 0.2: Corrigir Mapeamento e Transformação de Dados**
+- **Objetivo**: Garantir que dados do banco sejam corretamente mapeados para o formato do modal
+- **Ações**:
+  - Corrigir qualquer incompatibilidade de formato de data identificada
+  - Ajustar lógica de comparação de datas se necessário (usar `.split('T')[0]` para normalizar)
+  - Garantir que mapeamento de tipos de refeição está correto (acentuação)
+  - Validar que IDs de preparações existem antes de mapear para dropdowns
+  - Garantir que `setDaysConfig()` seja chamado após processamento completo de TODOS os dias
+  - Adicionar tratamento de erro para preparações não encontradas
+  - Verificar se a ordem dos dias está correta
+- **Especificações Detalhadas**:
+  - Normalizar formato de datas: `const dayString = day.toISOString().split('T')[0]`
+  - Verificar mapeamento: `colação` → `colacao`, `almoço` → `almoco`
+  - Validar preparações: verificar se `preparacao.id` existe em `preparacoes` carregadas
+  - Garantir que estado seja atualizado atomicamente (não em múltiplas chamadas)
+- **Critérios de Sucesso**:
+  - Dados do banco são corretamente transformados para formato do modal
+  - `daysConfig` contém todos os dias com dados corretos
+  - Não há erros de console relacionados a dados faltantes
+
+#### **Tarefa 0.3: Testar e Validar Carregamento Completo**
+- **Objetivo**: Validar que dados aparecem corretamente nas abas após correções
+- **Ações**:
+  - Testar com cardápio real existente no banco de dados
+  - Verificar se todas as abas dos dias aparecem
+  - Verificar se checkboxes de refeições estão marcados corretamente
+  - Verificar se preparações aparecem selecionadas nos dropdowns
+  - Verificar se valores de comensais aparecem nos inputs
+  - Confirmar que dias feriados são identificados e exibidos corretamente
+  - Testar com diferentes configurações (dias com/sem refeições, diferentes tipos)
+- **Cenários de Teste**:
+  1. Cardápio com todos os dias tendo todas as refeições
+  2. Cardápio com dias feriados (sem refeições)
+  3. Cardápio com dias tendo apenas algumas refeições habilitadas
+  4. Cardápio com preparações de todos os tipos
+- **Critérios de Sucesso**:
+  - Todas as abas dos dias exibem dados corretamente
+  - Refeições habilitadas aparecem com checkboxes marcados
+  - Preparações aparecem selecionadas nos dropdowns corretos
+  - Valores de comensais aparecem nos inputs
+  - Dias feriados são identificados visualmente
+  - Não há erros no console
+  - Modal está pronto para edição
+
+---
+
 ### **FASE 1: PREPARAÇÃO E VALIDAÇÃO**
 *Tempo estimado: 30 minutos*
+
+> **NOTA**: Esta fase só deve ser executada APÓS a conclusão bem-sucedida da Fase 0
 
 #### **Tarefa 1.1: Verificar Estado Atual**
 - **Objetivo**: Confirmar que todas as dependências estão funcionando
@@ -362,6 +448,16 @@ Este documento define o plano de execução detalhado para implementar a funcion
 
 ## 📋 CHECKLIST DE CONCLUSÃO
 
+### **Fase 0 - Debug e Correção (CRÍTICO)**
+- [ ] Problema de exibição nas abas identificado
+- [ ] Causa raiz documentada
+- [ ] Mapeamento de dados corrigido
+- [ ] Dados aparecem corretamente nas abas
+- [ ] Preparações aparecem nos dropdowns
+- [ ] Comensais aparecem nos inputs
+- [ ] Dias feriados identificados corretamente
+- [ ] Sem erros no console
+
 ### **Funcionalidades Core**
 - [ ] Modal detecta modo edição corretamente
 - [ ] Dados são carregados e exibidos adequadamente
@@ -399,15 +495,35 @@ Este documento define o plano de execução detalhado para implementar a funcion
 
 ## 🎯 CRITÉRIOS DE SUCESSO FINAL
 
-1. **Funcionalidade Completa**: Modal funciona perfeitamente para criar E editar cardápios
-2. **Integridade de Dados**: Todas as operações mantêm consistência do banco
-3. **Performance**: Operações são rápidas mesmo com cardápios complexos
-4. **UX Consistente**: Interface clara e intuitiva para ambos os modos
-5. **Robustez**: Sistema lida graciosamente com erros e casos edge
-6. **Compatibilidade**: Funcionalidade de criação continua funcionando normalmente
+1. **Carregamento Funcional**: Dados do cardápio aparecem corretamente nas abas dos dias (FASE 0)
+2. **Funcionalidade Completa**: Modal funciona perfeitamente para criar E editar cardápios
+3. **Integridade de Dados**: Todas as operações mantêm consistência do banco
+4. **Performance**: Operações são rápidas mesmo com cardápios complexos
+5. **UX Consistente**: Interface clara e intuitiva para ambos os modos
+6. **Robustez**: Sistema lida graciosamente com erros e casos edge
+7. **Compatibilidade**: Funcionalidade de criação continua funcionando normalmente
+
+---
+
+## 📝 NOTAS IMPORTANTES
+
+### Ordem de Execução Obrigatória
+1. **FASE 0** (Debug e Correção) - DEVE SER EXECUTADA PRIMEIRO
+2. FASE 1 (Preparação e Validação)
+3. FASE 2 (Implementação do Core)
+4. FASE 3 (Integração no Modal)
+5. FASE 4 (Validações e Refinamentos)
+6. FASE 5 (Testes e Validação)
+
+### Por que a Fase 0 é Crítica?
+- O carregamento em cascata JÁ ESTÁ implementado (getCardapioCompleto + loadCardapioData)
+- O problema é de EXIBIÇÃO/MAPEAMENTO, não de implementação
+- Não adianta implementar salvamento se o carregamento não funciona
+- Usuário reportou: "as abas dos dias não apresenta as informações"
 
 ---
 
 **Documento criado em**: Janeiro 2025  
+**Atualizado em**: Janeiro 2025 (Adicionada Fase 0)  
 **Baseado em**: CARDAPIO_EDIT_SPECIFICATION.md  
-**Status**: Pronto para execução
+**Status**: Pronto para execução - INICIAR PELA FASE 0
