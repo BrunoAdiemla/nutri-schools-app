@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Loader2, Save } from 'lucide-react';
+import { Loader2, Save } from 'lucide-react';
 import { useLucideIcons } from '../hooks/useLucideIcons';
 import { useAuth } from '../contexts/AuthContext';
 import { DatabaseService } from '../services/DatabaseService';
 import { useToast } from '../hooks/useToast';
 import { CardapioSemanal } from '../types';
 import LoadingModal from './LoadingModal';
+import ExtraDateInput from './ExtraDateInput';
 import criancasIcon from '../images/criancas.png';
 import adolescentesIcon from '../images/adolescentes.png';
 import adultosIcon from '../images/adultos.png';
@@ -39,6 +40,7 @@ interface MealData {
     guarnicao: string;
     salada: string;
     sobremesa: string;
+    liquido: string;
     comensaisPequenos: number;
     comensaisAdolescentes: number;
     comensaisAdultos: number;
@@ -59,6 +61,7 @@ interface MealData {
     guarnicao: string;
     salada: string;
     sobremesa: string;
+    liquido: string;
     comensaisPequenos: number;
     comensaisAdolescentes: number;
     comensaisAdultos: number;
@@ -100,10 +103,10 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
   const [loadingPreparacoes, setLoadingPreparacoes] = useState(false);
   
   // State for collapsing meal cards (default: false = expanded)
-  const [colacaoCollapsed, setColacaoCollapsed] = useState(false);
-  const [almocoCollapsed, setAlmocoCollapsed] = useState(false);
-  const [lancheCollapsed, setLancheCollapsed] = useState(false);
-  const [jantarCollapsed, setJantarCollapsed] = useState(false);
+  const [colacaoCollapsed] = useState(false);
+  const [almocoCollapsed] = useState(false);
+  const [lancheCollapsed] = useState(false);
+  const [jantarCollapsed] = useState(false);
   
   // Loading state for cardapio creation
   const [isLoading, setIsLoading] = useState(false);
@@ -112,10 +115,14 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
   const [isEditMode, setIsEditMode] = useState(false);
   const [loadingCardapioData, setLoadingCardapioData] = useState(false);
   
+  // Extra date state
+  const [selectedExtraDate, setSelectedExtraDate] = useState<Date | null>(null);
+  const [extraDatesAdded, setExtraDatesAdded] = useState<Date[]>([]);
+  
   const { profile } = useAuth();
   const { showError, showSuccess } = useToast();
   // Initialize Lucide icons
-  useLucideIcons([isOpen, dateRange, generatedDays, activeTab, colacaoCollapsed, almocoCollapsed, lancheCollapsed, jantarCollapsed]);
+  useLucideIcons([isOpen, dateRange, generatedDays, activeTab, daysConfig, colacaoCollapsed, almocoCollapsed, lancheCollapsed, jantarCollapsed]);
 
   // Load preparações when modal opens
   useEffect(() => {
@@ -182,10 +189,34 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
         console.log('🔍 [FASE 0] Step 6: Found cardapios_do_dia:', cardapioCompleto.cardapios_do_dia.length);
         console.log('🔍 [FASE 0] Cardapios do dia data:', cardapioCompleto.cardapios_do_dia.map((c: any) => ({ data: c.data, refeicoes: c.refeicoes?.length || 0 })));
         
+        // Identify extra dates (dates outside the original period)
+        const extraDates: Date[] = [];
+        const allDatesFromDB = cardapioCompleto.cardapios_do_dia.map((c: any) => {
+          const [year, month, day] = c.data.split('-').map(Number);
+          return new Date(year, month - 1, day);
+        });
+        
+        allDatesFromDB.forEach((dbDate: Date) => {
+          const isWithinOriginalPeriod = dbDate >= startDate && dbDate <= endDate;
+          if (!isWithinOriginalPeriod) {
+            extraDates.push(dbDate);
+          }
+        });
+        
+        console.log('🔍 [FASE 0] Step 6.1: Extra dates found:', extraDates.length);
+        console.log('🔍 [FASE 0] Extra dates:', extraDates.map(d => d.toISOString().split('T')[0]));
+        
+        // Update state with extra dates
+        setExtraDatesAdded(extraDates);
+        
+        // Combine original days with extra dates and sort chronologically
+        const allDates = [...days, ...extraDates].sort((a, b) => a.getTime() - b.getTime());
+        setGeneratedDays(allDates);
+        
         // Convert loaded data to our internal format
         const loadedDaysConfig: Record<number, DayConfig> = {};
         
-        days.forEach((day, index) => {
+        allDates.forEach((day, index) => {
           const dayString = day.toISOString().split('T')[0];
           const cardapioDoDia = cardapioCompleto.cardapios_do_dia.find(
             (c: any) => c.data === dayString
@@ -224,6 +255,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                   guarnicao: '', 
                   salada: '', 
                   sobremesa: '',
+                  liquido: '',
                   comensaisPequenos: 0,
                   comensaisAdolescentes: 0,
                   comensaisAdultos: 0
@@ -244,6 +276,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                   guarnicao: '', 
                   salada: '', 
                   sobremesa: '',
+                  liquido: '',
                   comensaisPequenos: 0,
                   comensaisAdolescentes: 0,
                   comensaisAdultos: 0
@@ -324,6 +357,9 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                     } else if (tipo === 'sobremesa') {
                       (dayConfig.meals[mealType] as any).sobremesa = preparacao.id;
                       console.log(`🔍 [FASE 0]         Mapped to ${mealType}.sobremesa = ${preparacao.id}`);
+                    } else if (tipo === 'líquido') {
+                      (dayConfig.meals[mealType] as any).liquido = preparacao.id;
+                      console.log(`🔍 [FASE 0]         Mapped to ${mealType}.liquido = ${preparacao.id}`);
                     }
                   }
                 }
@@ -364,6 +400,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                   guarnicao: '', 
                   salada: '', 
                   sobremesa: '',
+                  liquido: '',
                   comensaisPequenos: 0,
                   comensaisAdolescentes: 0,
                   comensaisAdultos: 0
@@ -384,6 +421,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                   guarnicao: '', 
                   salada: '', 
                   sobremesa: '',
+                  liquido: '',
                   comensaisPequenos: 0,
                   comensaisAdolescentes: 0,
                   comensaisAdultos: 0
@@ -463,6 +501,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
               guarnicao: '', 
               salada: '', 
               sobremesa: '',
+              liquido: '',
               comensaisPequenos: 0,
               comensaisAdolescentes: 0,
               comensaisAdultos: 0
@@ -483,6 +522,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
               guarnicao: '', 
               salada: '', 
               sobremesa: '',
+              liquido: '',
               comensaisPequenos: 0,
               comensaisAdolescentes: 0,
               comensaisAdultos: 0
@@ -516,11 +556,112 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
     setDaysConfig({});
     setIsEditMode(false);
     setLoadingCardapioData(false);
+    setSelectedExtraDate(null);
+    setExtraDatesAdded([]);
   };
 
   const handleClose = () => {
     resetModal();
     onClose();
+  };
+
+  // Extra date management functions
+  const handleExtraDateSelect = (date: Date | null) => {
+    setSelectedExtraDate(date);
+  };
+
+  const handleAddExtraDate = () => {
+    if (!selectedExtraDate) return;
+
+    // Add the extra date to the list
+    const newExtraDates = [...extraDatesAdded, selectedExtraDate];
+    setExtraDatesAdded(newExtraDates);
+
+    // Combine original days with extra dates and sort chronologically
+    const allDates = [...generatedDays, ...newExtraDates].sort((a, b) => a.getTime() - b.getTime());
+    setGeneratedDays(allDates);
+
+    // Create default day config for the new date
+    const newDayIndex = allDates.findIndex(date => date.getTime() === selectedExtraDate.getTime());
+    const defaultDayConfig: DayConfig = {
+      isHoliday: false,
+      enabledMeals: {
+        colacao: true,
+        almoco: true,
+        lanche: true,
+        jantar: true,
+      },
+      meals: {
+        colacao: { 
+          solido: '', 
+          liquido: '', 
+          frutas: '',
+          comensaisPequenos: 0,
+          comensaisAdolescentes: 0,
+          comensaisAdultos: 0
+        },
+        almoco: { 
+          acompanhamento1: '', 
+          acompanhamento2: '', 
+          complemento: '', 
+          pratoPrincipal: '', 
+          guarnicao: '', 
+          salada: '', 
+          sobremesa: '',
+          liquido: '',
+          comensaisPequenos: 0,
+          comensaisAdolescentes: 0,
+          comensaisAdultos: 0
+        },
+        lanche: { 
+          solido: '', 
+          liquido: '', 
+          frutas: '',
+          comensaisPequenos: 0,
+          comensaisAdolescentes: 0,
+          comensaisAdultos: 0
+        },
+        jantar: { 
+          acompanhamento1: '', 
+          acompanhamento2: '', 
+          complemento: '', 
+          pratoPrincipal: '', 
+          guarnicao: '', 
+          salada: '', 
+          sobremesa: '',
+          liquido: '',
+          comensaisPequenos: 0,
+          comensaisAdolescentes: 0,
+          comensaisAdultos: 0
+        },
+      },
+    };
+
+    // Update daysConfig with reindexed configurations
+    const newDaysConfig: Record<number, DayConfig> = {};
+    allDates.forEach((date, index) => {
+      if (date.getTime() === selectedExtraDate.getTime()) {
+        // This is the new extra date
+        newDaysConfig[index] = defaultDayConfig;
+      } else {
+        // Find the original config for this date
+        const originalIndex = generatedDays.findIndex(originalDate => originalDate.getTime() === date.getTime());
+        if (originalIndex !== -1 && daysConfig[originalIndex]) {
+          newDaysConfig[index] = daysConfig[originalIndex];
+        }
+      }
+    });
+
+    setDaysConfig(newDaysConfig);
+
+    // Navigate to the new tab
+    setActiveTab(newDayIndex);
+
+    // Clear the selected extra date
+    setSelectedExtraDate(null);
+    
+    // Show success feedback
+    showSuccess('Data extra adicionada!', `${selectedExtraDate.toLocaleDateString('pt-BR')} foi adicionada ao cardápio.`);
   };
 
   // Update day configuration
@@ -832,6 +973,17 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                   </div>
                 </div>
               )}
+
+              {/* Extra Date Input - Only show in edit mode */}
+              {isEditMode && (
+                <ExtraDateInput
+                  existingDates={generatedDays}
+                  onDateSelect={handleExtraDateSelect}
+                  onAddDate={handleAddExtraDate}
+                  selectedDate={selectedExtraDate}
+                  disabled={loadingCardapioData}
+                />
+              )}
             </div>
           </div>
 
@@ -848,11 +1000,14 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                   <div className="flex space-x-1 min-w-max">
                     {generatedDays.map((day, index) => {
                       const isHoliday = daysConfig[index]?.isHoliday || false;
+                      const isExtraDate = extraDatesAdded.some(extraDate => 
+                        extraDate.toDateString() === day.toDateString()
+                      );
                       return (
                         <button
                           key={index}
                           onClick={() => setActiveTab(index)}
-                          className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap ${
+                          className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors whitespace-nowrap relative ${
                             activeTab === index
                               ? isHoliday
                                 ? 'text-red-700 border-red-600 bg-red-50'
@@ -862,6 +1017,10 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                               : 'text-slate-600 border-transparent hover:text-slate-800 hover:border-slate-300'
                           }`}
                         >
+                          {/* Extra date indicator */}
+                          {isExtraDate && (
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white" title="Data extra adicionada"></div>
+                          )}
                           <div className="flex flex-col items-center gap-1">
                             <span className="text-xs capitalize">
                               {day.toLocaleDateString('pt-BR', { weekday: 'short' })}
@@ -881,31 +1040,56 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                 {generatedDays[activeTab] && getCurrentDayConfig() && (
                   <div className="p-6">
                     {/* Day Header */}
-                    <div className="mb-6">
+                    <div className="mb-6 flex items-center justify-between">
                       <h4 className="text-lg font-semibold text-slate-800 capitalize">
                         {formatDate(generatedDays[activeTab])}
                       </h4>
-                    </div>
-
-                    {/* Holiday/Recess Checkbox */}
-                    <div className="mb-6 pb-4 border-b border-slate-200">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={getCurrentDayConfig()?.isHoliday || false}
-                          onChange={() => toggleHoliday(activeTab)}
-                          className="w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500 focus:ring-2 cursor-pointer"
-                        />
-                        <span className="text-sm font-medium text-red-600 group-hover:text-red-700">
-                          Feriado/Recesso
-                        </span>
-                      </label>
-                      {getCurrentDayConfig()?.isHoliday && (
-                        <p className="mt-2 text-xs text-slate-500 ml-6">
-                          Os campos de refeições estão desabilitados para este dia
-                        </p>
+                      {/* Delete Day Checkbox - Only visible in EDIT mode */}
+                      {isEditMode && (
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={getCurrentDayConfig()?.isHoliday || false}
+                            onChange={() => toggleHoliday(activeTab)}
+                            className="w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500 focus:ring-2 cursor-pointer"
+                          />
+                          <span className="text-sm font-medium text-red-600 group-hover:text-red-700">
+                            Excluir cardápio deste dia
+                          </span>
+                        </label>
                       )}
                     </div>
+
+                    {/* Holiday/Recess Checkbox - Only visible in CREATE mode */}
+                    {!isEditMode && (
+                      <div className="mb-6 pb-4 border-b border-slate-200">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={getCurrentDayConfig()?.isHoliday || false}
+                            onChange={() => toggleHoliday(activeTab)}
+                            className="w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500 focus:ring-2 cursor-pointer"
+                          />
+                          <span className="text-sm font-medium text-red-600 group-hover:text-red-700">
+                            Feriado/Recesso
+                          </span>
+                        </label>
+                        {getCurrentDayConfig()?.isHoliday && (
+                          <p className="mt-2 text-xs text-slate-500 ml-6">
+                            Os campos de refeições estão desabilitados para este dia
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Message when day is marked as deleted (Edit mode only) */}
+                    {isEditMode && getCurrentDayConfig()?.isHoliday && (
+                      <div className="mb-6 pb-4 border-b border-slate-200">
+                        <p className="text-xs text-slate-500">
+                          Os campos de refeições estão desabilitados para este dia
+                        </p>
+                      </div>
+                    )}
 
                     {/* Meal Type Checkboxes */}
                     <div className="mb-6 pb-4 border-b border-slate-200">
@@ -969,7 +1153,7 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                       {getCurrentDayConfig()?.enabledMeals.colacao && (
                         <div className="bg-white rounded-lg border border-slate-200 p-6">
                           <h5 className="text-lg font-semibold text-slate-700 flex items-center gap-2 mb-4">
-                            <i data-lucide="coffee" className="w-7 h-7 text-amber-600"></i>
+                            <i data-lucide="coffee" className="w-7 h-7" style={{ color: '#588157' }}></i>
                             Colação
                           </h5>
                           {/* Separator line after title */}
@@ -981,11 +1165,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.colacao.solido || ''}
                                 onChange={(e) => updateMealField(activeTab, 'colacao', 'solido', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.colacao.solido || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('sólido').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -995,11 +1179,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.colacao.liquido || ''}
                                 onChange={(e) => updateMealField(activeTab, 'colacao', 'liquido', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.colacao.liquido || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('líquido').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1009,11 +1193,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.colacao.frutas || ''}
                                 onChange={(e) => updateMealField(activeTab, 'colacao', 'frutas', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.colacao.frutas || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('frutas').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1075,18 +1259,18 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                           </h5>
                           {/* Separator line after title */}
                           <div className="border-t border-slate-200 mb-4"></div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
                             <div>
                               <label className="block text-sm font-medium text-slate-700 mb-2">Acompanhamento 1</label>
                               <select
                                 value={getCurrentDayConfig()?.meals.almoco.acompanhamento1 || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'acompanhamento1', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.acompanhamento1 || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('acompanhamento').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1096,11 +1280,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.almoco.acompanhamento2 || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'acompanhamento2', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.acompanhamento2 || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('acompanhamento').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1110,11 +1294,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.almoco.pratoPrincipal || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'pratoPrincipal', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.pratoPrincipal || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('prato principal').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1124,11 +1308,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.almoco.complemento || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'complemento', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.complemento || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('complemento').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1138,11 +1322,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.almoco.guarnicao || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'guarnicao', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.guarnicao || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('guarnição').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1152,11 +1336,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.almoco.salada || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'salada', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.salada || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('salada').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1166,17 +1350,31 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.almoco.sobremesa || ''}
                                 onChange={(e) => updateMealField(activeTab, 'almoco', 'sobremesa', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.sobremesa || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('sobremesa').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-2">Líquido</label>
+                              <select
+                                value={getCurrentDayConfig()?.meals.almoco.liquido || ''}
+                                onChange={(e) => updateMealField(activeTab, 'almoco', 'liquido', e.target.value)}
+                                disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.almoco.liquido || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
+                              >
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                {getPreparacoesByType('líquido').map((preparacao) => (
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
                           </div>
                           {/* Separator line before comensais */}
-                          <div className="border-t border-slate-200 mt-9 mb-4"></div>
+                          <div className="border-t border-slate-200 mt-4 mb-4"></div>
                           <div className="grid grid-cols-3 gap-4">
                             <div>
                               <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
@@ -1239,11 +1437,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.lanche.solido || ''}
                                 onChange={(e) => updateMealField(activeTab, 'lanche', 'solido', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.lanche.solido || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('sólido').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1253,11 +1451,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.lanche.liquido || ''}
                                 onChange={(e) => updateMealField(activeTab, 'lanche', 'liquido', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.lanche.liquido || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('líquido').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1267,11 +1465,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.lanche.frutas || ''}
                                 onChange={(e) => updateMealField(activeTab, 'lanche', 'frutas', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.lanche.frutas || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('frutas').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1333,18 +1531,18 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                           </h5>
                           {/* Separator line after title */}
                           <div className="border-t border-slate-200 mb-4"></div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
                             <div>
                               <label className="block text-sm font-medium text-slate-700 mb-2">Acompanhamento 1</label>
                               <select
                                 value={getCurrentDayConfig()?.meals.jantar.acompanhamento1 || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'acompanhamento1', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.acompanhamento1 || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('acompanhamento').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1354,11 +1552,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.jantar.acompanhamento2 || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'acompanhamento2', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.acompanhamento2 || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('acompanhamento').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1368,11 +1566,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.jantar.pratoPrincipal || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'pratoPrincipal', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.pratoPrincipal || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('prato principal').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1382,11 +1580,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.jantar.complemento || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'complemento', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.complemento || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('complemento').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1396,11 +1594,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.jantar.guarnicao || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'guarnicao', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.guarnicao || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('guarnição').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1410,11 +1608,11 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.jantar.salada || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'salada', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.salada || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('salada').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
@@ -1424,17 +1622,31 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 value={getCurrentDayConfig()?.meals.jantar.sobremesa || ''}
                                 onChange={(e) => updateMealField(activeTab, 'jantar', 'sobremesa', e.target.value)}
                                 disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.sobremesa || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
                               >
-                                <option value="">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
                                 {getPreparacoesByType('sobremesa').map((preparacao) => (
-                                  <option key={preparacao.id} value={preparacao.id}>{preparacao.nome}</option>
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-2">Líquido</label>
+                              <select
+                                value={getCurrentDayConfig()?.meals.jantar.liquido || ''}
+                                onChange={(e) => updateMealField(activeTab, 'jantar', 'liquido', e.target.value)}
+                                disabled={getCurrentDayConfig()?.isHoliday || loadingPreparacoes}
+                                className={`w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed ${(getCurrentDayConfig()?.meals.jantar.liquido || '') === '' ? 'text-slate-400' : 'text-slate-900'}`}
+                              >
+                                <option value="" className="text-slate-400">{loadingPreparacoes ? 'Carregando...' : 'Selecione uma opção'}</option>
+                                {getPreparacoesByType('líquido').map((preparacao) => (
+                                  <option key={preparacao.id} value={preparacao.id} className="text-slate-900">{preparacao.nome}</option>
                                 ))}
                               </select>
                             </div>
                           </div>
                           {/* Separator line before comensais */}
-                          <div className="border-t border-slate-200 mt-9 mb-4"></div>
+                          <div className="border-t border-slate-200 mt-4 mb-4"></div>
                           <div className="grid grid-cols-3 gap-4">
                             <div>
                               <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">

@@ -866,7 +866,7 @@ export class DatabaseService {
         return ['solido', 'liquido', 'frutas'];
       case 'almoco':
       case 'jantar':
-        return ['acompanhamento1', 'acompanhamento2', 'complemento', 'pratoPrincipal', 'guarnicao', 'salada', 'sobremesa'];
+        return ['acompanhamento1', 'acompanhamento2', 'complemento', 'pratoPrincipal', 'guarnicao', 'salada', 'sobremesa', 'liquido'];
       default:
         return [];
     }
@@ -1190,7 +1190,7 @@ export class DatabaseService {
         logger.log(`[DatabaseService] Day to create: ${dateString}`);
       } else {
         // Existing day - check for changes in refeicoes
-        this.detectMealChanges(originalDay, dayConfig, changeSet);
+        this.detectMealChanges(originalDay, dayConfig, changeSet, newData.userId);
       }
     });
 
@@ -1213,7 +1213,8 @@ export class DatabaseService {
   private static detectMealChanges(
     originalDay: any,
     newDayConfig: DayConfig,
-    changeSet: ChangeSet
+    changeSet: ChangeSet,
+    userId: string
   ): void {
     // Create maps for easier lookup
     const originalMealsMap = new Map<string, any>();
@@ -1240,7 +1241,8 @@ export class DatabaseService {
         changeSet.refeicoesToCreate.push({
           tipo: this.convertMealTypeToDatabase(mealType),
           dayId: originalDay.id,
-          mealData: newDayConfig.meals[mealType as keyof typeof newDayConfig.meals]
+          mealData: newDayConfig.meals[mealType as keyof typeof newDayConfig.meals],
+          userId: userId
         });
         logger.log(`[DatabaseService] Meal to create: ${mealType} on ${originalDay.data}`);
       } else if (isEnabled && originalMeal) {
@@ -1296,10 +1298,13 @@ export class DatabaseService {
     mealType: string,
     changeSet: ChangeSet
   ): void {
+    logger.log(`[DatabaseService] Detecting preparacao changes for meal type: ${mealType}, refeicao ID: ${originalMeal.id}`);
+    
     // For simplicity, we'll delete all existing preparacoes and recreate them
     // This ensures consistency and handles all edge cases
     
     if (originalMeal.preparacoes) {
+      logger.log(`[DatabaseService] Found ${originalMeal.preparacoes.length} existing preparacoes to delete`);
       originalMeal.preparacoes.forEach((prep: any) => {
         changeSet.preparacoesToDelete.push(prep.id);
       });
@@ -1307,16 +1312,31 @@ export class DatabaseService {
 
     // Add new preparacoes
     const preparacaoFields = this.getPreparacaoFieldsForMealType(mealType);
+    const addedPreparacoes = new Set<string>();
+    
+    logger.log(`[DatabaseService] Checking preparacao fields for ${mealType}:`, preparacaoFields);
+    logger.log(`[DatabaseService] New meal data:`, newMealData);
+    
     preparacaoFields.forEach(field => {
       const preparacaoId = newMealData[field];
+      logger.log(`[DatabaseService] Field ${field}: ${preparacaoId}`);
+      
       if (preparacaoId && typeof preparacaoId === 'string' && preparacaoId.trim() !== '') {
-        changeSet.preparacoesToCreate.push({
-          refeicao_id: originalMeal.id,
-          preparacao_id: preparacaoId,
-          field
-        });
+        // Avoid duplicates
+        if (!addedPreparacoes.has(preparacaoId)) {
+          changeSet.preparacoesToCreate.push({
+            refeicao_id: originalMeal.id,
+            preparacao_id: preparacaoId
+          });
+          addedPreparacoes.add(preparacaoId);
+          logger.log(`[DatabaseService] Added preparacao to create: ${preparacaoId} for refeicao ${originalMeal.id}`);
+        } else {
+          logger.log(`[DatabaseService] Skipping duplicate preparacao: ${preparacaoId}`);
+        }
       }
     });
+    
+    logger.log(`[DatabaseService] Total preparacoes to create for this meal: ${addedPreparacoes.size}`);
   }
 
   /**
@@ -1425,7 +1445,7 @@ export class DatabaseService {
             comensais_adolescentes: refeicaoToCreate.mealData.comensaisAdolescentes || 0,
             comensais_adultos: refeicaoToCreate.mealData.comensaisAdultos || 0,
             cardapio_id: refeicaoToCreate.dayId,
-            created_by: refeicaoToCreate.userId || ''
+            created_by: refeicaoToCreate.userId
           }])
           .select()
           .single();
@@ -1522,15 +1542,28 @@ export class DatabaseService {
     mealData: any,
     mealType: string
   ): Promise<void> {
-    const preparacaoFields = this.getPreparacaoFieldsForMealType(mealType);
+    // Convert meal type from database format to internal format if needed
+    let normalizedMealType = mealType;
+    if (mealType === 'colação') normalizedMealType = 'colacao';
+    if (mealType === 'almoço') normalizedMealType = 'almoco';
+    
+    logger.log(`[DatabaseService] createPreparacoesForRefeicao - Original mealType: "${mealType}", Normalized: "${normalizedMealType}"`);
+    
+    const preparacaoFields = this.getPreparacaoFieldsForMealType(normalizedMealType);
     const addedPreparacoes = new Set<string>();
+
+    logger.log(`[DatabaseService] createPreparacoesForRefeicao - Preparacao fields for ${normalizedMealType}:`, preparacaoFields);
+    logger.log(`[DatabaseService] createPreparacoesForRefeicao - Meal data:`, mealData);
 
     for (const field of preparacaoFields) {
       const preparacaoId = mealData[field];
       
+      logger.log(`[DatabaseService] createPreparacoesForRefeicao - Checking field "${field}": ${preparacaoId}`);
+      
       if (preparacaoId && typeof preparacaoId === 'string' && preparacaoId.trim() !== '') {
         // Avoid duplicates
         if (addedPreparacoes.has(preparacaoId)) {
+          logger.log(`[DatabaseService] createPreparacoesForRefeicao - Skipping duplicate preparacao: ${preparacaoId}`);
           continue;
         }
 
@@ -1545,6 +1578,8 @@ export class DatabaseService {
           logger.warn(`Warning: Could not find preparacao ${preparacaoId}:`, preparacaoError);
           continue;
         }
+
+        logger.log(`[DatabaseService] createPreparacoesForRefeicao - Creating refeicao_preparacao for: ${preparacao.nome} (${preparacaoId})`);
 
         // Create refeicao_preparacao
         const { error: refeicaoPreparacaoError } = await supabase
@@ -1561,8 +1596,11 @@ export class DatabaseService {
         }
 
         addedPreparacoes.add(preparacaoId);
+        logger.log(`[DatabaseService] createPreparacoesForRefeicao - Successfully created refeicao_preparacao for: ${preparacao.nome}`);
       }
     }
+    
+    logger.log(`[DatabaseService] createPreparacoesForRefeicao - Total preparacoes created: ${addedPreparacoes.size}`);
   }
 
   /**
