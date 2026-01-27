@@ -26,6 +26,7 @@ interface IngredientePreparacao {
   nome: string;
   quantidade_por_per_capita: number;
   unidade_medida: UnidadeMedida;
+  kcal_por_100g_ou_100ml?: number;
 }
 
 interface FormErrors {
@@ -151,7 +152,8 @@ const PreparacaoModal: React.FC<PreparacaoModalProps> = ({
               ingrediente_id: item.ingredientes.id,
               nome: item.ingredientes.nome,
               quantidade_por_per_capita: item.quantidade_por_per_capita,
-              unidade_medida: item.unidade_medida
+              unidade_medida: item.unidade_medida,
+              kcal_por_100g_ou_100ml: item.ingredientes.kcal_por_100g_ou_100ml // Incluir valor calórico
             }));
 
             console.log(`[PreparacaoModal] Loaded ${ingredientesFormatados.length} existing ingredients`);
@@ -357,7 +359,8 @@ const PreparacaoModal: React.FC<PreparacaoModalProps> = ({
       ingrediente_id: selectedIngrediente,
       nome: ingrediente.nome,
       quantidade_por_per_capita: quantidade,
-      unidade_medida: ingredienteUnidade as UnidadeMedida
+      unidade_medida: ingredienteUnidade as UnidadeMedida,
+      kcal_por_100g_ou_100ml: ingrediente.kcal_por_100g_ou_100ml // Capturar o valor calórico do ingrediente
     };
 
     setFormData(prev => ({
@@ -713,14 +716,14 @@ const PreparacaoModal: React.FC<PreparacaoModalProps> = ({
                       value={ingredienteQuantidade}
                       onChange={(e) => {
                         const value = e.target.value;
-                        // Allow numbers with up to three decimal places
-                        const regex = /^\d*\.?\d{0,3}$/;
+                        // Allow numbers with up to one decimal place
+                        const regex = /^\d*\.?\d{0,1}$/;
                         if (value === '' || regex.test(value)) {
                           setIngredienteQuantidade(value);
                         }
                       }}
                       className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1"
-                      placeholder="0.000"
+                      placeholder="0.0"
                       disabled={loading}
                     />
                     <p className="mt-1 text-xs text-slate-500">

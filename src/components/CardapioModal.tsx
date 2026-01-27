@@ -119,6 +119,19 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
   const [selectedExtraDate, setSelectedExtraDate] = useState<Date | null>(null);
   const [extraDatesAdded, setExtraDatesAdded] = useState<Date[]>([]);
   
+  // Change detection state
+  const [initialDaysConfig, setInitialDaysConfig] = useState<Record<number, DayConfig>>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  
+  // Caloric calculation state
+  const [calculatedCalories, setCalculatedCalories] = useState<Record<number, {
+    colacao?: { pequenos: number; adolescentes: number; adultos: number };
+    almoco?: { pequenos: number; adolescentes: number; adultos: number };
+    lanche?: { pequenos: number; adolescentes: number; adultos: number };
+    jantar?: { pequenos: number; adolescentes: number; adultos: number };
+  }>>({});
+  
   const { profile } = useAuth();
   const { showError, showSuccess } = useToast();
   // Initialize Lucide icons
@@ -140,6 +153,245 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
       setIsEditMode(false);
     }
   }, [isOpen, cardapioToEdit]);
+
+  // Detect changes in daysConfig (only in edit mode)
+  useEffect(() => {
+    if (isEditMode && Object.keys(initialDaysConfig).length > 0) {
+      const hasChanges = JSON.stringify(daysConfig) !== JSON.stringify(initialDaysConfig);
+      setHasUnsavedChanges(hasChanges);
+    }
+  }, [daysConfig, initialDaysConfig, isEditMode]);
+
+  // Auto-calculate calories for Colação when dropdowns change
+  useEffect(() => {
+    const calculateColacaoCalories = async () => {
+      const currentConfig = daysConfig[activeTab];
+      
+      // Only calculate if:
+      // 1. We have a valid day config
+      // 2. It's not a holiday
+      // 3. Colação is enabled
+      // 4. At least one preparação is selected
+      if (!currentConfig || currentConfig.isHoliday || !currentConfig.enabledMeals.colacao) {
+        return;
+      }
+
+      const preparacaoIds = [
+        currentConfig.meals.colacao.solido,
+        currentConfig.meals.colacao.liquido,
+        currentConfig.meals.colacao.frutas,
+      ].filter(Boolean);
+
+      // Only calculate if there's at least one preparação selected
+      if (preparacaoIds.length === 0) {
+        // Clear calories if no preparações are selected
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            colacao: undefined,
+          },
+        }));
+        return;
+      }
+
+      try {
+        const colacaoCalories = await calculateMealCalories(preparacaoIds);
+        
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            colacao: colacaoCalories,
+          },
+        }));
+      } catch (error) {
+        console.error('Error auto-calculating Colação calories:', error);
+      }
+    };
+
+    calculateColacaoCalories();
+  }, [
+    activeTab,
+    daysConfig[activeTab]?.meals.colacao.solido,
+    daysConfig[activeTab]?.meals.colacao.liquido,
+    daysConfig[activeTab]?.meals.colacao.frutas,
+    daysConfig[activeTab]?.enabledMeals.colacao,
+    daysConfig[activeTab]?.isHoliday,
+  ]);
+
+  // Auto-calculate calories for Almoço when dropdowns change
+  useEffect(() => {
+    const calculateAlmocoCalories = async () => {
+      const currentConfig = daysConfig[activeTab];
+      
+      if (!currentConfig || currentConfig.isHoliday || !currentConfig.enabledMeals.almoco) {
+        return;
+      }
+
+      const preparacaoIds = [
+        currentConfig.meals.almoco.acompanhamento1,
+        currentConfig.meals.almoco.acompanhamento2,
+        currentConfig.meals.almoco.complemento,
+        currentConfig.meals.almoco.pratoPrincipal,
+        currentConfig.meals.almoco.guarnicao,
+        currentConfig.meals.almoco.salada,
+        currentConfig.meals.almoco.sobremesa,
+        currentConfig.meals.almoco.liquido,
+      ].filter(Boolean);
+
+      if (preparacaoIds.length === 0) {
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            almoco: undefined,
+          },
+        }));
+        return;
+      }
+
+      try {
+        const almocoCalories = await calculateMealCalories(preparacaoIds);
+        
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            almoco: almocoCalories,
+          },
+        }));
+      } catch (error) {
+        console.error('Error auto-calculating Almoço calories:', error);
+      }
+    };
+
+    calculateAlmocoCalories();
+  }, [
+    activeTab,
+    daysConfig[activeTab]?.meals.almoco.acompanhamento1,
+    daysConfig[activeTab]?.meals.almoco.acompanhamento2,
+    daysConfig[activeTab]?.meals.almoco.complemento,
+    daysConfig[activeTab]?.meals.almoco.pratoPrincipal,
+    daysConfig[activeTab]?.meals.almoco.guarnicao,
+    daysConfig[activeTab]?.meals.almoco.salada,
+    daysConfig[activeTab]?.meals.almoco.sobremesa,
+    daysConfig[activeTab]?.meals.almoco.liquido,
+    daysConfig[activeTab]?.enabledMeals.almoco,
+    daysConfig[activeTab]?.isHoliday,
+  ]);
+
+  // Auto-calculate calories for Lanche when dropdowns change
+  useEffect(() => {
+    const calculateLancheCalories = async () => {
+      const currentConfig = daysConfig[activeTab];
+      
+      if (!currentConfig || currentConfig.isHoliday || !currentConfig.enabledMeals.lanche) {
+        return;
+      }
+
+      const preparacaoIds = [
+        currentConfig.meals.lanche.solido,
+        currentConfig.meals.lanche.liquido,
+        currentConfig.meals.lanche.frutas,
+      ].filter(Boolean);
+
+      if (preparacaoIds.length === 0) {
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            lanche: undefined,
+          },
+        }));
+        return;
+      }
+
+      try {
+        const lancheCalories = await calculateMealCalories(preparacaoIds);
+        
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            lanche: lancheCalories,
+          },
+        }));
+      } catch (error) {
+        console.error('Error auto-calculating Lanche calories:', error);
+      }
+    };
+
+    calculateLancheCalories();
+  }, [
+    activeTab,
+    daysConfig[activeTab]?.meals.lanche.solido,
+    daysConfig[activeTab]?.meals.lanche.liquido,
+    daysConfig[activeTab]?.meals.lanche.frutas,
+    daysConfig[activeTab]?.enabledMeals.lanche,
+    daysConfig[activeTab]?.isHoliday,
+  ]);
+
+  // Auto-calculate calories for Jantar when dropdowns change
+  useEffect(() => {
+    const calculateJantarCalories = async () => {
+      const currentConfig = daysConfig[activeTab];
+      
+      if (!currentConfig || currentConfig.isHoliday || !currentConfig.enabledMeals.jantar) {
+        return;
+      }
+
+      const preparacaoIds = [
+        currentConfig.meals.jantar.acompanhamento1,
+        currentConfig.meals.jantar.acompanhamento2,
+        currentConfig.meals.jantar.complemento,
+        currentConfig.meals.jantar.pratoPrincipal,
+        currentConfig.meals.jantar.guarnicao,
+        currentConfig.meals.jantar.salada,
+        currentConfig.meals.jantar.sobremesa,
+        currentConfig.meals.jantar.liquido,
+      ].filter(Boolean);
+
+      if (preparacaoIds.length === 0) {
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            jantar: undefined,
+          },
+        }));
+        return;
+      }
+
+      try {
+        const jantarCalories = await calculateMealCalories(preparacaoIds);
+        
+        setCalculatedCalories(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            jantar: jantarCalories,
+          },
+        }));
+      } catch (error) {
+        console.error('Error auto-calculating Jantar calories:', error);
+      }
+    };
+
+    calculateJantarCalories();
+  }, [
+    activeTab,
+    daysConfig[activeTab]?.meals.jantar.acompanhamento1,
+    daysConfig[activeTab]?.meals.jantar.acompanhamento2,
+    daysConfig[activeTab]?.meals.jantar.complemento,
+    daysConfig[activeTab]?.meals.jantar.pratoPrincipal,
+    daysConfig[activeTab]?.meals.jantar.guarnicao,
+    daysConfig[activeTab]?.meals.jantar.salada,
+    daysConfig[activeTab]?.meals.jantar.sobremesa,
+    daysConfig[activeTab]?.meals.jantar.liquido,
+    daysConfig[activeTab]?.enabledMeals.jantar,
+    daysConfig[activeTab]?.isHoliday,
+  ]);
 
   const loadPreparacoes = async () => {
     if (!profile?.id) return;
@@ -434,6 +686,9 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
         console.log('🔍 [FASE 0] Step 7: Final loadedDaysConfig:', loadedDaysConfig);
         console.log('🔍 [FASE 0] Step 8: Calling setDaysConfig...');
         setDaysConfig(loadedDaysConfig);
+        // Save initial state for change detection
+        setInitialDaysConfig(JSON.parse(JSON.stringify(loadedDaysConfig)));
+        setHasUnsavedChanges(false);
         console.log('🔍 [FASE 0] Step 9: setDaysConfig called successfully');
         console.log('🔍 [FASE 0] ======================================== END');
         showSuccess('Cardápio carregado!', 'Os dados do cardápio foram carregados para edição.');
@@ -558,11 +813,29 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
     setLoadingCardapioData(false);
     setSelectedExtraDate(null);
     setExtraDatesAdded([]);
+    setInitialDaysConfig({});
+    setHasUnsavedChanges(false);
+    setShowUnsavedChangesModal(false);
   };
 
   const handleClose = () => {
+    // Check for unsaved changes in edit mode
+    if (isEditMode && hasUnsavedChanges) {
+      setShowUnsavedChangesModal(true);
+      return;
+    }
     resetModal();
     onClose();
+  };
+
+  const handleConfirmClose = () => {
+    setShowUnsavedChangesModal(false);
+    resetModal();
+    onClose();
+  };
+
+  const handleCancelClose = () => {
+    setShowUnsavedChangesModal(false);
   };
 
   // Extra date management functions
@@ -721,6 +994,61 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
     return daysConfig[activeTab] || null;
   };
 
+  // Calculate calories for a meal
+  const calculateMealCalories = async (preparacaoIds: string[]): Promise<{ pequenos: number; adolescentes: number; adultos: number }> => {
+    let totalCalories = 0;
+
+    // For each preparação in the meal
+    for (const preparacaoId of preparacaoIds) {
+      if (!preparacaoId) continue;
+
+      try {
+        // Fetch ingredientes for this preparação
+        const { data: ingredientesData, error } = await DatabaseService.supabase
+          .from('ingrediente_preparacao')
+          .select(`
+            quantidade_por_per_capita,
+            ingredientes (
+              kcal_por_100g_ou_100ml
+            )
+          `)
+          .eq('preparacao_id', preparacaoId);
+
+        if (error) {
+          console.error('Error fetching ingredientes for preparação:', preparacaoId, error);
+          continue;
+        }
+
+        if (!ingredientesData || ingredientesData.length === 0) {
+          console.log('No ingredientes found for preparação:', preparacaoId);
+          continue;
+        }
+
+        // Calculate calories for this preparação
+        for (const item of ingredientesData) {
+          const quantidadePerCapita = item.quantidade_por_per_capita;
+          const kcalPor100g = (item.ingredientes as any)?.kcal_por_100g_ou_100ml;
+
+          if (quantidadePerCapita && kcalPor100g) {
+            // Formula: (quantidade_por_per_capita / 100) * kcal_por_100g_ou_100ml
+            // Note: quantidade_por_per_capita is now in g/ml (not kg/L), so no need to multiply by 1000
+            const caloriesFromIngredient = (quantidadePerCapita / 100) * kcalPor100g;
+            totalCalories += caloriesFromIngredient;
+          }
+        }
+      } catch (error) {
+        console.error('Error calculating calories for preparação:', preparacaoId, error);
+      }
+    }
+
+    // Apply multipliers for different age groups
+    return {
+      adultos: Math.round(totalCalories * 10) / 10, // 1.0x (base)
+      adolescentes: Math.round(totalCalories * 0.8 * 10) / 10, // 0.8x
+      pequenos: Math.round(totalCalories * 0.6 * 10) / 10, // 0.6x
+    };
+  };
+
   // Handle cardapio save
   const handleSaveCardapio = async () => {
     if (!profile?.id) {
@@ -801,6 +1129,9 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
       if (result.success) {
         const successMessage = isEditMode ? 'Cardápio atualizado com sucesso!' : 'Cardápio criado com sucesso!';
         showSuccess(successMessage);
+        // Reset unsaved changes state after successful save
+        setHasUnsavedChanges(false);
+        setInitialDaysConfig(JSON.parse(JSON.stringify(daysConfig)));
         onSave({ 
           dateRange, 
           generatedDays, 
@@ -1248,6 +1579,44 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                               />
                             </div>
                           </div>
+                          {/* Separator line before caloric information */}
+                          <div className="border-t border-slate-200 mt-6 mb-4"></div>
+                          {/* Caloric Information Section */}
+                          <div>
+                            <h6 className="text-sm font-semibold text-slate-700 mb-3">Informações calóricas</h6>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos pequenos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.colacao?.pequenos 
+                                    ? `${calculatedCalories[activeTab].colacao.pequenos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adolescentes
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.colacao?.adolescentes 
+                                    ? `${calculatedCalories[activeTab].colacao.adolescentes} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adultos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.colacao?.adultos 
+                                    ? `${calculatedCalories[activeTab].colacao.adultos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
                       {/* Almoço */}
@@ -1419,6 +1788,44 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                               />
                             </div>
                           </div>
+                          {/* Separator line before caloric information */}
+                          <div className="border-t border-slate-200 mt-6 mb-4"></div>
+                          {/* Caloric Information Section */}
+                          <div>
+                            <h6 className="text-sm font-semibold text-slate-700 mb-3">Informações calóricas</h6>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos pequenos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.almoco?.pequenos 
+                                    ? `${calculatedCalories[activeTab].almoco.pequenos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adolescentes
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.almoco?.adolescentes 
+                                    ? `${calculatedCalories[activeTab].almoco.adolescentes} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adultos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.almoco?.adultos 
+                                    ? `${calculatedCalories[activeTab].almoco.adultos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
                       {/* Lanche - Similar to Colação */}
@@ -1518,6 +1925,44 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                                 disabled={getCurrentDayConfig()?.isHoliday}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none focus:ring-1 disabled:bg-slate-100 disabled:cursor-not-allowed"
                               />
+                            </div>
+                          </div>
+                          {/* Separator line before caloric information */}
+                          <div className="border-t border-slate-200 mt-6 mb-4"></div>
+                          {/* Caloric Information Section */}
+                          <div>
+                            <h6 className="text-sm font-semibold text-slate-700 mb-3">Informações calóricas</h6>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos pequenos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.lanche?.pequenos 
+                                    ? `${calculatedCalories[activeTab].lanche.pequenos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adolescentes
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.lanche?.adolescentes 
+                                    ? `${calculatedCalories[activeTab].lanche.adolescentes} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adultos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.lanche?.adultos 
+                                    ? `${calculatedCalories[activeTab].lanche.adultos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1691,6 +2136,44 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
                               />
                             </div>
                           </div>
+                          {/* Separator line before caloric information */}
+                          <div className="border-t border-slate-200 mt-6 mb-4"></div>
+                          {/* Caloric Information Section */}
+                          <div>
+                            <h6 className="text-sm font-semibold text-slate-700 mb-3">Informações calóricas</h6>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos pequenos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.jantar?.pequenos 
+                                    ? `${calculatedCalories[activeTab].jantar.pequenos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adolescentes
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.jantar?.adolescentes 
+                                    ? `${calculatedCalories[activeTab].jantar.adolescentes} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                  Prato dos adultos
+                                </label>
+                                <p className="text-sm text-slate-400">
+                                  {calculatedCalories[activeTab]?.jantar?.adultos 
+                                    ? `${calculatedCalories[activeTab].jantar.adultos} kcal` 
+                                    : '-- kcal'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1749,6 +2232,70 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
           isOpen={isLoading}
           message={isEditMode ? 'Salvando alterações do cardápio...' : 'Salvando cardápio...'}
         />
+      )}
+
+      {/* Unsaved Changes Confirmation Modal */}
+      {showUnsavedChangesModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleCancelClose();
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                  <i data-lucide="alert-triangle" className="w-5 h-5 text-red-600"></i>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Alterações não salvas</h2>
+                  <p className="text-sm text-slate-500">Você tem alterações pendentes</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCancelClose}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <i data-lucide="x" className="w-5 h-5 text-slate-400"></i>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-sm text-slate-600 mb-3">
+                  Você fez alterações no cardápio que ainda não foram salvas. Se fechar agora, essas alterações serão perdidas.
+                </p>
+                
+                <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                  <p className="text-sm font-medium text-red-900">Deseja realmente cancelar as alterações?</p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleCancelClose}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                >
+                  Continuar editando
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmClose}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                >
+                  Descartar alterações
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

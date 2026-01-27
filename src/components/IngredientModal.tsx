@@ -42,8 +42,8 @@ const INGREDIENT_TYPES: { value: IngredienteTipo; label: string }[] = [
 ];
 
 const MEASUREMENT_UNITS: { value: UnidadeMedida; label: string }[] = [
-  { value: 'kg', label: 'Quilogramas (kg)' },
-  { value: 'l', label: 'Litros (l)' }
+  { value: 'g', label: 'Gramas (g)' },
+  { value: 'ml', label: 'Mililitros (ml)' }
 ];
 
 const IngredientModal: React.FC<IngredientModalProps> = ({
@@ -215,9 +215,9 @@ const IngredientModal: React.FC<IngredientModalProps> = ({
     }
     
     switch (formData.unidade_medida) {
-      case 'kg':
+      case 'g':
         return 'Calorias por 100g';
-      case 'l':
+      case 'ml':
         return 'Calorias por 100ml';
       default:
         return 'Calorias';

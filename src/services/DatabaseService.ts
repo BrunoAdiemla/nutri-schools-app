@@ -97,6 +97,9 @@ interface CardapioUpdateData {
 }
 
 export class DatabaseService {
+  // Export supabase client for direct access when needed
+  static supabase = supabase;
+
   // User Profile Management
   static async createUserProfile(user: User, profileData: Omit<UserProfile, 'id' | 'auth_user_id' | 'created_at'>): Promise<UserProfile | null> {
     try {
@@ -453,7 +456,8 @@ export class DatabaseService {
           quantidade_por_per_capita: ingrediente.quantidade_por_per_capita,
           unidade_medida: ingrediente.unidade_medida,
           nome_preparacao: preparacao.nome, // Populate denormalized field
-          nome_ingrediente: ingrediente.nome // Populate denormalized field
+          nome_ingrediente: ingrediente.nome, // Populate denormalized field
+          kcal_por_100g_ou_100ml: ingrediente.kcal_por_100g_ou_100ml // Armazenar valor calórico
         }));
 
         const { error: ingredientesError } = await supabase
@@ -523,7 +527,8 @@ export class DatabaseService {
             quantidade_por_per_capita: ingrediente.quantidade_por_per_capita,
             unidade_medida: ingrediente.unidade_medida,
             nome_preparacao: preparacao.nome, // Populate denormalized field
-            nome_ingrediente: ingrediente.nome // Populate denormalized field
+            nome_ingrediente: ingrediente.nome, // Populate denormalized field
+            kcal_por_100g_ou_100ml: ingrediente.kcal_por_100g_ou_100ml // Armazenar valor calórico
           }));
 
           const { error: insertError } = await supabase

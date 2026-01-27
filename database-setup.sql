@@ -70,10 +70,11 @@ CREATE TABLE IF NOT EXISTS public.ingrediente_preparacao (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ingrediente_id UUID NOT NULL REFERENCES public.ingredientes(id) ON DELETE CASCADE,
     preparacao_id UUID NOT NULL REFERENCES public.preparacoes(id) ON DELETE CASCADE,
-    quantidade_por_per_capita DECIMAL(10,3) NOT NULL CHECK (quantidade_por_per_capita > 0),
+    quantidade_por_per_capita DECIMAL(10,1) NOT NULL CHECK (quantidade_por_per_capita > 0),
     unidade_medida TEXT NOT NULL,
     nome_preparacao TEXT,
     nome_ingrediente TEXT,
+    kcal_por_100g_ou_100ml DECIMAL(10,2) CHECK (kcal_por_100g_ou_100ml >= 0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(ingrediente_id, preparacao_id)
 );
