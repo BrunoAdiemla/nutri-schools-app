@@ -14,7 +14,7 @@ interface LoginFormErrors {
 }
 
 const LoginPage: React.FC = () => {
-  const { signIn, error: authError, isAuthenticated } = useAuth();
+  const { signIn, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState<LoginFormData>({
     email: '',
     password: ''
@@ -145,12 +145,12 @@ const LoginPage: React.FC = () => {
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* General Error */}
-            {(errors.general || authError) && (
+            {errors.general && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                 <div className="flex items-center gap-2">
                   <i data-lucide="alert-circle" className="w-4 h-4 text-red-600"></i>
                   <span className="text-sm text-red-700">
-                    {errors.general || authError}
+                    {errors.general}
                   </span>
                 </div>
               </div>

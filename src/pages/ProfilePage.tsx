@@ -20,11 +20,6 @@ interface ProfileFormData {
   avatar_url?: string;
 }
 
-interface FeedbackMessage {
-  type: 'success' | 'error';
-  message: string;
-}
-
 const ProfilePage: React.FC = () => {
   const { profile, user, loading: authLoading, refreshProfile, updatePassword } = useAuth();
   const { showSuccess, showError } = useToast();

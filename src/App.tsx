@@ -11,7 +11,6 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ProfileSetupPage from './pages/ProfileSetupPage';
 import ProfilePage from './pages/ProfilePage';
 import SettingsPage from './pages/SettingsPage';
-import MenusPage from './pages/MenusPage';
 import IngredientsPage from './pages/IngredientsPage';
 import PreparacoesPage from './pages/PreparacoesPage';
 import CardapiosPage from './pages/CardapiosPage';

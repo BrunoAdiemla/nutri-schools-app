@@ -69,7 +69,7 @@ export class ProfileImageService {
       const fileName = `${userId}/avatar${fileExtension}`;
 
       // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { data: _data, error } = await supabase.storage
         .from(this.BUCKET_NAME)
         .upload(fileName, file, {
           cacheControl: '3600',
@@ -216,7 +216,7 @@ export class ProfileImageService {
    */
   static async checkBucketAccess(): Promise<{ accessible: boolean; error?: string }> {
     try {
-      const { data, error } = await supabase.storage
+      const { data: _data, error } = await supabase.storage
         .from(this.BUCKET_NAME)
         .list('', { limit: 1 });
 
