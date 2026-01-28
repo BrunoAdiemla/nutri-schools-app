@@ -1109,7 +1109,8 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
             }, 
             generatedDays, 
             daysConfig, 
-            userId: profile.id 
+            userId: profile.id,
+            calculatedCalories
           }
         );
       } else {
@@ -1122,7 +1123,8 @@ const CardapioModal: React.FC<CardapioModalProps> = ({ isOpen, onClose, onSave, 
           },
           generatedDays,
           daysConfig,
-          userId: profile.id
+          userId: profile.id,
+          calculatedCalories
         });
       }
 

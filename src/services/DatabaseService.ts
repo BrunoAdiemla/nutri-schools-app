@@ -94,6 +94,12 @@ interface CardapioUpdateData {
   generatedDays: Date[];
   daysConfig: Record<number, DayConfig>;
   userId: string;
+  calculatedCalories?: Record<number, {
+    colacao?: { pequenos: number; adolescentes: number; adultos: number };
+    almoco?: { pequenos: number; adolescentes: number; adultos: number };
+    lanche?: { pequenos: number; adolescentes: number; adultos: number };
+    jantar?: { pequenos: number; adolescentes: number; adultos: number };
+  }>;
 }
 
 export class DatabaseService {
@@ -784,6 +790,9 @@ export class DatabaseService {
                 comensais_pequenos: mealData.comensaisPequenos || 0,
                 comensais_adolescentes: mealData.comensaisAdolescentes || 0,
                 comensais_adultos: mealData.comensaisAdultos || 0,
+                kcal_pequenos: cardapioData.calculatedCalories?.[dayIndex]?.[mealType]?.pequenos || null,
+                kcal_adolescentes: cardapioData.calculatedCalories?.[dayIndex]?.[mealType]?.adolescentes || null,
+                kcal_adultos: cardapioData.calculatedCalories?.[dayIndex]?.[mealType]?.adultos || null,
                 cardapio_id: cardapioDoDia.id,
                 created_by: userId,
               }
@@ -1183,19 +1192,20 @@ export class DatabaseService {
     // 2. Find days to create or update
     newDaysMap.forEach((newDayData, dateString) => {
       const originalDay = originalDaysMap.get(dateString);
-      const { dayConfig } = newDayData;
+      const { dayConfig, index } = newDayData;
 
       if (!originalDay) {
         // New day - create cardapio_do_dia and all its refeicoes
         changeSet.cardapiosToCreate.push({
           data: dateString,
           dayConfig,
-          userId: newData.userId
+          userId: newData.userId,
+          calories: newData.calculatedCalories?.[index]
         });
         logger.log(`[DatabaseService] Day to create: ${dateString}`);
       } else {
         // Existing day - check for changes in refeicoes
-        this.detectMealChanges(originalDay, dayConfig, changeSet, newData.userId);
+        this.detectMealChanges(originalDay, dayConfig, changeSet, newData.userId, newData.calculatedCalories?.[index]);
       }
     });
 
@@ -1219,7 +1229,8 @@ export class DatabaseService {
     originalDay: any,
     newDayConfig: DayConfig,
     changeSet: ChangeSet,
-    userId: string
+    userId: string,
+    dayCalories?: any
   ): void {
     // Create maps for easier lookup
     const originalMealsMap = new Map<string, any>();
@@ -1247,7 +1258,8 @@ export class DatabaseService {
           tipo: this.convertMealTypeToDatabase(mealType),
           dayId: originalDay.id,
           mealData: newDayConfig.meals[mealType as keyof typeof newDayConfig.meals],
-          userId: userId
+          userId: userId,
+          calories: dayCalories?.[mealType]
         });
         logger.log(`[DatabaseService] Meal to create: ${mealType} on ${originalDay.data}`);
       } else if (isEnabled && originalMeal) {
@@ -1255,13 +1267,17 @@ export class DatabaseService {
         const mealData = newDayConfig.meals[mealType as keyof typeof newDayConfig.meals];
         const hasChanges = this.detectMealDataChanges(originalMeal, mealData);
         
-        if (hasChanges.comensaisChanged) {
+        // Always update calories when there are any changes (comensais or preparacoes)
+        if (hasChanges.comensaisChanged || hasChanges.preparacoesChanged) {
           changeSet.refeicoesToUpdate.push({
             id: originalMeal.id,
             data: {
               comensais_pequenos: mealData.comensaisPequenos || 0,
               comensais_adolescentes: mealData.comensaisAdolescentes || 0,
-              comensais_adultos: mealData.comensaisAdultos || 0
+              comensais_adultos: mealData.comensaisAdultos || 0,
+              kcal_pequenos: dayCalories?.[mealType]?.pequenos || null,
+              kcal_adolescentes: dayCalories?.[mealType]?.adolescentes || null,
+              kcal_adultos: dayCalories?.[mealType]?.adultos || null
             }
           });
         }
@@ -1435,7 +1451,7 @@ export class DatabaseService {
         createdCardapioIds.set(cardapioToCreate.data, newCardapio.id);
 
         // Create refeicoes for this day
-        await this.createRefeicoesForDay(newCardapio.id, cardapioToCreate.dayConfig, cardapioToCreate.userId);
+        await this.createRefeicoesForDay(newCardapio.id, cardapioToCreate.dayConfig, cardapioToCreate.userId, cardapioToCreate.calories);
       }
 
       // 3.2 Create refeicoes (for existing days)
@@ -1449,6 +1465,9 @@ export class DatabaseService {
             comensais_pequenos: refeicaoToCreate.mealData.comensaisPequenos || 0,
             comensais_adolescentes: refeicaoToCreate.mealData.comensaisAdolescentes || 0,
             comensais_adultos: refeicaoToCreate.mealData.comensaisAdultos || 0,
+            kcal_pequenos: refeicaoToCreate.calories?.pequenos || null,
+            kcal_adolescentes: refeicaoToCreate.calories?.adolescentes || null,
+            kcal_adultos: refeicaoToCreate.calories?.adultos || null,
             cardapio_id: refeicaoToCreate.dayId,
             created_by: refeicaoToCreate.userId
           }])
@@ -1505,7 +1524,8 @@ export class DatabaseService {
   private static async createRefeicoesForDay(
     cardapioDoDiaId: string,
     dayConfig: DayConfig,
-    userId: string
+    userId: string,
+    calories?: any
   ): Promise<void> {
     const enabledMeals = dayConfig.enabledMeals;
     const meals = dayConfig.meals;
@@ -1524,6 +1544,9 @@ export class DatabaseService {
           comensais_pequenos: mealData.comensaisPequenos || 0,
           comensais_adolescentes: mealData.comensaisAdolescentes || 0,
           comensais_adultos: mealData.comensaisAdultos || 0,
+          kcal_pequenos: calories?.[mealType]?.pequenos || null,
+          kcal_adolescentes: calories?.[mealType]?.adolescentes || null,
+          kcal_adultos: calories?.[mealType]?.adultos || null,
           cardapio_id: cardapioDoDiaId,
           created_by: userId
         }])
