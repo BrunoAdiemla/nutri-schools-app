@@ -100,6 +100,8 @@ export interface CardapioSemanal {
   nome: string;
   data_inicio: string; // ISO date string
   data_fim: string; // ISO date string
+  lista_compras_gerada?: boolean; // Nova coluna para controlar se já foi gerada lista de compras
+  tem_lista_compras?: boolean; // Nova coluna para otimizar queries de verificação de lista
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -202,9 +204,33 @@ export interface CreateRefeicaoPreparacaoPayload {
 
 export interface ListaCompras {
   id: string;
+  cardapio_semanal_id?: string;
+  nome?: string;
+  status?: 'rascunho' | 'finalizada' | 'comprada';
+  observacoes?: string;
   data_inicial: string;
   data_final: string;
   created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListaComprasItem {
+  id: string;
+  lista_compras_id: string;
+  ingrediente_id: string;
+  ingrediente_nome: string;
+  unidade_medida: string;
+  quantidade_calculada: number;
+  quantidade_ajustada?: number | null;
+  fator_correcao_aplicado: number;
+  detalhes_calculo?: any;
+  comprado?: boolean;
+  quantidade_comprada?: number | null;
+  preco_unitario?: number | null;
+  preco_total?: number | null;
+  fornecedor?: string | null;
+  observacoes?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,0 +1,5 @@
+**/*.test.ts
+**/*.test.tsx
+**/*.property.test.ts
+**/*.property.test.tsx
+src/test/

@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS public.cardapios_semanais (
     nome TEXT NOT NULL,
     data_inicio DATE NOT NULL,
     data_fim DATE NOT NULL,
+    lista_compras_gerada BOOLEAN DEFAULT FALSE,
     created_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -148,8 +149,12 @@ CREATE TABLE IF NOT EXISTS public.refeicao_preparacoes (
 
 CREATE TABLE IF NOT EXISTS public.listas_compras (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    cardapio_semanal_id UUID REFERENCES public.cardapios_semanais(id) ON DELETE CASCADE,
+    nome TEXT,
     data_inicial DATE NOT NULL,
     data_final DATE NOT NULL,
+    status TEXT DEFAULT 'rascunho' CHECK (status IN ('rascunho', 'finalizada', 'comprada')),
+    observacoes TEXT,
     created_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -157,7 +162,67 @@ CREATE TABLE IF NOT EXISTS public.listas_compras (
 );
 
 -- =====================================================
--- 10. TABELA INGREDIENTES_ESTOQUE (Controle de estoque)
+-- 10. TABELA LISTA_COMPRAS_ITENS (Itens da lista de compras)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.lista_compras_itens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lista_compras_id UUID NOT NULL REFERENCES public.listas_compras(id) ON DELETE CASCADE,
+    ingrediente_id UUID NOT NULL REFERENCES public.ingredientes(id) ON DELETE CASCADE,
+    
+    -- Dados do ingrediente (desnormalizados para histórico)
+    ingrediente_nome TEXT NOT NULL,
+    unidade_medida TEXT NOT NULL,
+    
+    -- Quantidades calculadas
+    quantidade_calculada DECIMAL(10,3) NOT NULL CHECK (quantidade_calculada > 0),
+    quantidade_ajustada DECIMAL(10,3),
+    fator_correcao_aplicado DECIMAL(5,2) NOT NULL,
+    
+    -- Detalhamento do cálculo (JSONB para flexibilidade)
+    detalhes_calculo JSONB,
+    
+    -- Controle de compra
+    comprado BOOLEAN DEFAULT FALSE,
+    quantidade_comprada DECIMAL(10,3),
+    preco_unitario DECIMAL(10,2),
+    preco_total DECIMAL(10,2),
+    fornecedor TEXT,
+    
+    -- Observações específicas do item
+    observacoes TEXT,
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Constraints
+    UNIQUE(lista_compras_id, ingrediente_id)
+);
+
+-- =====================================================
+-- 11. TABELA FATORES_FAIXA_ETARIA (Configuração de fatores por usuário)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS public.fatores_faixa_etaria (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    
+    -- Fatores de ajuste por faixa etária
+    fator_pequenos DECIMAL(3,2) DEFAULT 0.70 CHECK (fator_pequenos > 0),
+    fator_adolescentes DECIMAL(3,2) DEFAULT 1.00 CHECK (fator_adolescentes > 0),
+    fator_adultos DECIMAL(3,2) DEFAULT 1.20 CHECK (fator_adultos > 0),
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Cada usuário tem apenas uma configuração
+    UNIQUE(user_id)
+);
+
+-- =====================================================
+-- 12. TABELA INGREDIENTES_ESTOQUE (Controle de estoque)
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS public.ingredientes_estoque (
@@ -190,6 +255,22 @@ CREATE INDEX IF NOT EXISTS idx_refeicao_preparacoes_preparacao_id ON public.refe
 CREATE INDEX IF NOT EXISTS idx_refeicao_preparacoes_tipo ON public.refeicao_preparacoes(tipo);
 CREATE INDEX IF NOT EXISTS idx_ingredientes_estoque_ingrediente ON public.ingredientes_estoque(ingrediente_id);
 
+-- Índices para listas_compras
+CREATE INDEX IF NOT EXISTS idx_listas_compras_cardapio_id ON public.listas_compras(cardapio_semanal_id);
+CREATE INDEX IF NOT EXISTS idx_listas_compras_status ON public.listas_compras(status);
+CREATE INDEX IF NOT EXISTS idx_listas_compras_created_by ON public.listas_compras(created_by);
+
+-- Índice para cardapios_semanais
+CREATE INDEX IF NOT EXISTS idx_cardapios_semanais_lista_gerada ON public.cardapios_semanais(lista_compras_gerada);
+
+-- Índices para lista_compras_itens
+CREATE INDEX IF NOT EXISTS idx_lista_compras_itens_lista_id ON public.lista_compras_itens(lista_compras_id);
+CREATE INDEX IF NOT EXISTS idx_lista_compras_itens_ingrediente_id ON public.lista_compras_itens(ingrediente_id);
+CREATE INDEX IF NOT EXISTS idx_lista_compras_itens_comprado ON public.lista_compras_itens(comprado);
+
+-- Índice para fatores_faixa_etaria
+CREATE INDEX IF NOT EXISTS idx_fatores_faixa_etaria_user_id ON public.fatores_faixa_etaria(user_id);
+
 -- =====================================================
 -- TRIGGERS PARA UPDATED_AT
 -- =====================================================
@@ -211,6 +292,8 @@ CREATE TRIGGER update_cardapios_semanais_updated_at BEFORE UPDATE ON public.card
 CREATE TRIGGER update_cardapios_updated_at BEFORE UPDATE ON public.cardapios_do_dia FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_refeicoes_updated_at BEFORE UPDATE ON public.refeicoes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_listas_compras_updated_at BEFORE UPDATE ON public.listas_compras FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_lista_compras_itens_updated_at BEFORE UPDATE ON public.lista_compras_itens FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_fatores_faixa_etaria_updated_at BEFORE UPDATE ON public.fatores_faixa_etaria FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ingredientes_estoque_updated_at BEFORE UPDATE ON public.ingredientes_estoque FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
@@ -226,6 +309,8 @@ ALTER TABLE public.cardapios_do_dia ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.refeicoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.refeicao_preparacoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.listas_compras ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.lista_compras_itens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fatores_faixa_etaria ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ingredientes_estoque ENABLE ROW LEVEL SECURITY;
 
 -- Políticas para a tabela users
@@ -271,6 +356,52 @@ CREATE POLICY "Users can manage meal preparations" ON public.refeicao_preparacoe
 -- Políticas para listas de compras
 CREATE POLICY "Users can manage own shopping lists" ON public.listas_compras FOR ALL USING (
     created_by IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+);
+
+-- Políticas para lista_compras_itens
+CREATE POLICY "Users can view own shopping list items" ON public.lista_compras_itens FOR SELECT USING (
+    lista_compras_id IN (
+        SELECT id FROM public.listas_compras 
+        WHERE created_by IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+    )
+);
+
+CREATE POLICY "Users can insert own shopping list items" ON public.lista_compras_itens FOR INSERT WITH CHECK (
+    lista_compras_id IN (
+        SELECT id FROM public.listas_compras 
+        WHERE created_by IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+    )
+);
+
+CREATE POLICY "Users can update own shopping list items" ON public.lista_compras_itens FOR UPDATE USING (
+    lista_compras_id IN (
+        SELECT id FROM public.listas_compras 
+        WHERE created_by IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+    )
+);
+
+CREATE POLICY "Users can delete own shopping list items" ON public.lista_compras_itens FOR DELETE USING (
+    lista_compras_id IN (
+        SELECT id FROM public.listas_compras 
+        WHERE created_by IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+    )
+);
+
+-- Políticas para fatores_faixa_etaria
+CREATE POLICY "Users can view own age group factors" ON public.fatores_faixa_etaria FOR SELECT USING (
+    user_id IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "Users can insert own age group factors" ON public.fatores_faixa_etaria FOR INSERT WITH CHECK (
+    user_id IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "Users can update own age group factors" ON public.fatores_faixa_etaria FOR UPDATE USING (
+    user_id IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
+);
+
+CREATE POLICY "Users can delete own age group factors" ON public.fatores_faixa_etaria FOR DELETE USING (
+    user_id IN (SELECT id FROM public.users WHERE auth_user_id = auth.uid())
 );
 
 -- Políticas para estoque de ingredientes

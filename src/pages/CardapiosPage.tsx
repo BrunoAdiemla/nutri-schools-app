@@ -3,9 +3,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { CardapioSemanal } from '../types';
 import { DatabaseService } from '../services/DatabaseService';
+import { ListaComprasService } from '../services/ListaComprasService';
 import { useLucideIcons } from '../hooks/useLucideIcons';
 import CardapioModal from '../components/CardapioModal';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
+import ListaComprasModal from '../components/ListaComprasModal';
+import ConfirmGenerateListaComprasModal from '../components/ConfirmGenerateListaComprasModal';
 import { logger } from '../utils/logger';
 
 const CardapiosPage: React.FC = () => {
@@ -20,9 +23,14 @@ const CardapiosPage: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [cardapioToDelete, setCardapioToDelete] = useState<CardapioSemanal | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showListaComprasModal, setShowListaComprasModal] = useState(false);
+  const [cardapioParaLista, setCardapioParaLista] = useState<CardapioSemanal | null>(null);
+  const [showConfirmGenerateModal, setShowConfirmGenerateModal] = useState(false);
+  const [cardapioToGenerate, setCardapioToGenerate] = useState<CardapioSemanal | null>(null);
+  const [generateLoading, setGenerateLoading] = useState(false);
 
   // Initialize Lucide icons using custom hook
-  useLucideIcons([cardapios, showFilters, searchTerm]);
+  useLucideIcons([cardapios, showFilters, searchTerm, 'clipboard-list', 'shopping-cart', 'info']);
 
   // Load cardapios when user/profile are available
   useEffect(() => {
@@ -126,6 +134,89 @@ const CardapiosPage: React.FC = () => {
       showError('Erro ao excluir cardápio', errorMessage);
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleGerarListaCompras = (cardapio: CardapioSemanal) => {
+    // Abrir modal de confirmação
+    setCardapioToGenerate(cardapio);
+    setShowConfirmGenerateModal(true);
+  };
+
+  const handleEditarListaCompras = (cardapio: CardapioSemanal) => {
+    try {
+      // Garantir limpeza adequada do estado do modal antes de abrir
+      setCardapioParaLista(null);
+      setShowListaComprasModal(false);
+      
+      // Configurar novo estado
+      setCardapioParaLista(cardapio);
+      setShowListaComprasModal(true);
+    } catch (error) {
+      logger.error('[CardapiosPage] Erro ao abrir modal de lista de compras:', error);
+      showError('Erro', 'Não foi possível abrir a lista de compras');
+    }
+  };
+
+  // Função auxiliar para renderizar a coluna Lista de compras
+  const renderListaComprasColumn = (cardapio: CardapioSemanal) => {
+    // Tratar casos onde tem_lista_compras é undefined como FALSE
+    const hasListaCompras = cardapio.tem_lista_compras === true;
+    
+    if (hasListaCompras) {
+      return (
+        <button 
+          onClick={() => handleEditarListaCompras(cardapio)}
+          className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+          title="Editar lista de compras"
+        >
+          <i data-lucide="clipboard-list" className="w-4 h-4"></i>
+        </button>
+      );
+    } else {
+      return (
+        <button 
+          onClick={() => handleGerarListaCompras(cardapio)}
+          className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+          title="Gerar lista de compras para este cardápio"
+        >
+          Gerar lista de compras
+        </button>
+      );
+    }
+  };
+
+  const handleConfirmGenerateListaCompras = async () => {
+    if (!profile || !cardapioToGenerate) return;
+
+    logger.log(`[CardapiosPage] Gerar lista de compras para cardápio: ${cardapioToGenerate.id}`);
+    
+    try {
+      setGenerateLoading(true);
+      
+      const result = await ListaComprasService.gerarListaCompras(cardapioToGenerate.id, profile.id);
+      
+      if (result.success) {
+        showSuccess('Lista de compras gerada!', 'A lista foi criada com sucesso.');
+        
+        // Fechar modal de confirmação
+        setShowConfirmGenerateModal(false);
+        
+        // Atualizar a lista de cardápios para refletir a flag lista_compras_gerada
+        loadCardapios(true);
+        
+        // Abrir o modal com o cardápio
+        setCardapioParaLista(cardapioToGenerate);
+        setShowListaComprasModal(true);
+      } else {
+        showError('Erro ao gerar lista', result.error || 'Erro desconhecido');
+      }
+    } catch (error) {
+      logger.error('[CardapiosPage] Erro ao gerar lista de compras:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      showError('Erro ao gerar lista', errorMessage);
+    } finally {
+      setGenerateLoading(false);
     }
   };
 
@@ -248,13 +339,14 @@ const CardapiosPage: React.FC = () => {
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Título</th>
                 <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Período</th>
+                <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Lista de compras</th>
                 <th className="px-6 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredCardapios.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-6 py-8 text-center">
+                  <td colSpan={4} className="px-6 py-8 text-center">
                     <div className="flex flex-col items-center gap-2 text-slate-500">
                       <i data-lucide="search-x" className="w-8 h-8"></i>
                       <p className="text-sm font-medium">Nenhum cardápio encontrado</p>
@@ -272,6 +364,9 @@ const CardapiosPage: React.FC = () => {
                       <div className="text-sm text-slate-600">
                         {cardapio.nome}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {renderListaComprasColumn(cardapio)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -322,6 +417,29 @@ const CardapiosPage: React.FC = () => {
         onClose={handleCardapioModalClose}
         onSave={handleSaveCardapio}
         cardapioToEdit={cardapioToEdit}
+      />
+
+      {/* Lista de Compras Modal */}
+      <ListaComprasModal
+        isOpen={showListaComprasModal}
+        onClose={() => {
+          setShowListaComprasModal(false);
+          setCardapioParaLista(null);
+        }}
+        cardapioNome={cardapioParaLista?.nome || ''}
+        cardapioId={cardapioParaLista?.id}
+      />
+
+      {/* Confirm Generate Lista de Compras Modal */}
+      <ConfirmGenerateListaComprasModal
+        isOpen={showConfirmGenerateModal}
+        onClose={() => {
+          setShowConfirmGenerateModal(false);
+          setCardapioToGenerate(null);
+        }}
+        onConfirm={handleConfirmGenerateListaCompras}
+        cardapioNome={cardapioToGenerate?.nome || ''}
+        loading={generateLoading}
       />
 
       {/* Delete Confirmation Modal */}

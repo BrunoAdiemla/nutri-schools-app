@@ -710,6 +710,7 @@ export class DatabaseService {
             data_inicio: dateRange.startDate.toISOString().split('T')[0],
             data_fim: dateRange.endDate.toISOString().split('T')[0],
             created_by: userId,
+            tem_lista_compras: false
           }
         ])
         .select()
