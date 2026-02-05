@@ -15,13 +15,14 @@ export type IngredienteTipo =
   | 'leguminosas'
   | 'cereais-e-derivados'
   | 'tuberculos-e-raizes'
-  | 'hortalicas'
+  | 'verduras-hortalicas-derivados'
   | 'oleos-gorduras-oleaginosas'
   | 'acucares-e-doces'
   | 'bebidas'
   | 'condimentos-e-temperos'
   | 'frutas'
-  | 'paes-e-biscoitos';
+  | 'paes-e-biscoitos'
+  | 'pescados-frutos-do-mar';
 
 export type UnidadeMedida = 'g' | 'kg' | 'ml' | 'l' | 'unidade' | 'xícara' | 'colher';
 
@@ -221,6 +222,7 @@ export interface ListaComprasItem {
   ingrediente_id: string;
   ingrediente_nome: string;
   unidade_medida: string;
+  unidade_medida_compra?: string | null;
   quantidade_calculada: number;
   quantidade_ajustada?: number | null;
   fator_correcao_aplicado: number;

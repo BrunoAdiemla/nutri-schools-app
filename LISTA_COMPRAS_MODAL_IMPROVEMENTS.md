@@ -1,157 +1,92 @@
-# Lista de Compras Modal - Melhorias Implementadas
+# Lista de Compras Modal - Melhorias na Interface
 
 ## Resumo das Alterações
 
-Este documento descreve as melhorias implementadas no modal "Lista de Compras" conforme solicitado.
+Este documento descreve as melhorias implementadas no modal "Lista de Compras" conforme solicitado pelo usuário.
 
-## 1. Exibição da Unidade de Medida na Coluna "Qtd. Calculada"
+## Alterações Implementadas
 
-### Alteração Realizada
+### 1. Remoção da Coluna "Unidade"
 - **Arquivo**: `src/components/ListaComprasModal.tsx`
-- **Mudança**: A coluna "Qtd. Calculada" agora exibe o valor com a unidade de medida
-- **Antes**: `100.00`
-- **Depois**: `100.00g` ou `100.00ml`
+- **Mudança**: Removida a coluna "Unidade" que exibia `item.unidade_medida`
+- **Motivo**: Simplificar a interface e remover informação redundante
 
-### Implementação
-```tsx
-<td className="py-3 px-4 text-slate-600">
-  {item.quantidade_calculada.toFixed(2)}{item.unidade_medida}
-</td>
-```
-
-## 2. Inicialização do Campo `quantidade_ajustada`
-
-### Alteração Realizada
-- **Arquivo**: `src/services/ListaComprasService.ts`
-- **Mudança**: O campo `quantidade_ajustada` agora é inicializado com o mesmo valor de `quantidade_calculada` na criação dos itens
-
-### Implementação
-```typescript
-const itensParaInserir = ingredientesCalculados.map((item) => ({
-  lista_compras_id: novaLista.id,
-  ingrediente_id: item.ingrediente_id,
-  ingrediente_nome: item.ingrediente_nome,
-  unidade_medida: item.unidade_medida,
-  quantidade_calculada: item.quantidade_total,
-  quantidade_ajustada: item.quantidade_total, // Inicializar com o mesmo valor
-  fator_correcao_aplicado: item.fator_correcao,
-  detalhes_calculo: item.detalhes_calculo
-}));
-```
-
-### Comportamento
-- Na criação: `quantidade_ajustada = quantidade_calculada`
-- Após criação: O usuário pode editar `quantidade_ajustada` independentemente
-- `quantidade_calculada` permanece inalterada como referência
-
-## 3. Substituição do Ícone "Ver Detalhes" por Ícone de Lixeira
-
-### Alterações Realizadas
-
-#### 3.1 Novo Método de Exclusão no Service
-- **Arquivo**: `src/services/ListaComprasService.ts`
-- **Método**: `deletarItemListaCompras(itemId: string, userId: string)`
-- **Funcionalidade**: Deleta um item específico da lista de compras com verificação de permissões
-
-#### 3.2 Modal de Confirmação de Exclusão
+### 2. Inputs Editáveis sem Atualização Automática
 - **Arquivo**: `src/components/ListaComprasModal.tsx`
-- **Componente**: Integração com `DeleteConfirmationModal`
-- **Funcionalidade**: Modal de confirmação antes de excluir um item
+- **Mudança**: 
+  - Campo "Qtd. Ajustada" é editável mas NÃO salva automaticamente no banco
+  - Dropdown "Medida da compra" é editável mas NÃO salva automaticamente no banco
+  - Criados handlers locais: `handleQuantidadeAjustadaChange` e `handleUnidadeMedidaCompraChange`
+  - Ambos atualizam apenas o estado local (React state)
+  - Removida variável de estado `updating` (não é mais necessária)
+  - Removidos spinners de loading dos inputs
+  - Removidos atributos `disabled` dos inputs
+- **Motivo**: Permitir edição livre sem salvamento automático. O salvamento será implementado posteriormente através de botões de ação
 
-#### 3.3 Substituição do Ícone na Tabela
-- **Antes**: Ícone `info` com tooltip "Ver detalhes do cálculo"
-- **Depois**: Ícone `trash-2` com tooltip "Remover item da lista"
+### 3. Estilo do Botão "Adicionar Ingrediente"
+- **Arquivo**: `src/components/ListaComprasModal.tsx`
+- **Mudança**: 
+  - Alteradas as classes CSS do botão "Adicionar Ingrediente"
+  - Antes: `text-white bg-green-600 hover:bg-green-700`
+  - Depois: `text-slate-700 bg-slate-100 hover:bg-slate-200`
+- **Motivo**: Manter consistência visual com o botão "Salvar Rascunho"
 
-### Implementação do Ícone de Lixeira
-```tsx
-<button
-  onClick={() => handleDeleteItem(item)}
-  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-  title="Remover item da lista"
->
-  <i data-lucide="trash-2" className="w-4 h-4"></i>
-</button>
+### 4. Nova Coluna "Medida da compra"
+- **Arquivo**: `src/components/ListaComprasModal.tsx`
+- **Mudança**: 
+  - Adicionada nova coluna "Medida da compra" após "Qtd. Ajustada"
+  - Implementado dropdown com opções: kg, g, l, ml
+  - Dropdown vinculado ao campo `unidade_medida_compra` da tabela `lista_compras_itens`
+  - Atualização apenas local (não salva no banco automaticamente)
+- **Comportamento**:
+  - Valor padrão: vazio ("-")
+  - Edição livre sem salvamento automático
+  - Sem feedback visual de loading
+
+## Estrutura da Tabela Atualizada
+
+```
+| Ingrediente | Qtd. Calculada | Qtd. Ajustada | Medida da compra | Ações |
+|-------------|----------------|---------------|------------------|-------|
+| Arroz       | 2 kg           | [input]       | [dropdown]       | [🗑️]  |
 ```
 
-### Fluxo de Exclusão
-1. Usuário clica no ícone de lixeira
-2. Modal de confirmação é exibido com o nome do ingrediente
-3. Usuário confirma a exclusão
-4. Item é removido do banco de dados
-5. Lista local é atualizada
-6. Feedback de sucesso é exibido
+## Fluxo de Uso Atual
 
-## 4. Estados e Controles Implementados
+1. Usuário abre o modal "Lista de Compras"
+2. Visualiza a quantidade calculada automaticamente
+3. Pode editar livremente a "Qtd. Ajustada" (apenas estado local)
+4. Pode selecionar a "Medida da compra" no dropdown (apenas estado local)
+5. As edições NÃO são salvas automaticamente no banco de dados
+6. O salvamento será implementado posteriormente através de botões de ação
 
-### Estados Adicionados
-```typescript
-const [deleteModal, setDeleteModal] = useState<{
-  isOpen: boolean;
-  item: ListaComprasItem | null;
-  loading: boolean;
-}>({
-  isOpen: false,
-  item: null,
-  loading: false
-});
-```
+## Arquivos Modificados
 
-### Funções de Controle
-- `handleDeleteItem(item)`: Abre o modal de confirmação
-- `confirmDeleteItem()`: Executa a exclusão
-- `closeDeleteModal()`: Fecha o modal de confirmação
+1. `src/components/ListaComprasModal.tsx`
+   - Removida coluna "Unidade"
+   - Removida atualização automática de quantidade e unidade de medida
+   - Alterado estilo do botão "Adicionar Ingrediente"
+   - Adicionada coluna "Medida da compra" com dropdown
+   - Implementados handlers locais sem chamadas ao banco de dados
+   - Removida variável de estado `updating`
+   - Removidos spinners e estados de loading dos inputs
 
-## 5. Segurança e Validações
+2. `src/services/ListaComprasService.ts`
+   - Método `atualizarUnidadeMedidaCompra` permanece disponível para uso futuro
 
-### Verificações de Permissão
-- Verificação se o usuário é o criador da lista antes de permitir exclusão
-- Validação de existência do item antes da exclusão
-- Tratamento de erros com mensagens apropriadas
+3. `src/types/index.ts`
+   - Interface `ListaComprasItem` com campo `unidade_medida_compra`
 
-### Tratamento de Erros
-- Logs detalhados para debugging
-- Mensagens de erro amigáveis para o usuário
-- Reversão de mudanças locais em caso de falha no servidor
+## Dependências
 
-## 6. Experiência do Usuário
+- Coluna `unidade_medida_compra` já criada na tabela `lista_compras_itens` via migration SQL
+- Campo é nullable e aceita valores: 'l', 'ml', 'kg', 'g'
 
-### Melhorias na UX
-- **Responsividade**: Atualização local imediata seguida de sincronização com servidor
-- **Feedback Visual**: Loading states durante operações
-- **Confirmação**: Modal de confirmação para evitar exclusões acidentais
-- **Informações Claras**: Exibição da unidade de medida para melhor compreensão
+## Notas Técnicas
 
-### Acessibilidade
-- Tooltips informativos nos botões
-- Estados de loading visíveis
-- Cores apropriadas para ações destrutivas (vermelho para exclusão)
-
-## 7. Arquivos Modificados
-
-1. **`src/services/ListaComprasService.ts`**
-   - Adicionado método `deletarItemListaCompras`
-   - Modificado método `gerarListaCompras` para inicializar `quantidade_ajustada`
-
-2. **`src/components/ListaComprasModal.tsx`**
-   - Importado `DeleteConfirmationModal`
-   - Adicionados estados para controle do modal de exclusão
-   - Implementadas funções de exclusão
-   - Modificada exibição da quantidade calculada
-   - Substituído ícone de detalhes por ícone de lixeira
-
-## 8. Compatibilidade
-
-- ✅ Mantém compatibilidade com dados existentes
-- ✅ Não quebra funcionalidades existentes
-- ✅ Utiliza componentes já existentes (`DeleteConfirmationModal`)
-- ✅ Segue padrões de design já estabelecidos no projeto
-
-## Conclusão
-
-Todas as três melhorias solicitadas foram implementadas com sucesso:
-
-1. ✅ **Unidade de medida na coluna "Qtd. Calculada"**
-2. ✅ **Inicialização de `quantidade_ajustada` com valor de `quantidade_calculada`**
-3. ✅ **Substituição do ícone "Ver detalhes" por ícone de lixeira com modal de confirmação**
-
-As alterações mantêm a consistência com o design system existente e seguem as melhores práticas de UX/UI implementadas no projeto.
+- Todos os inputs são editáveis livremente
+- Nenhuma edição é salva automaticamente no banco de dados
+- As edições ficam apenas no estado local do React
+- Ícones Lucide são reinicializados após mudanças no estado
+- Sem feedback visual de loading durante edições
+- O salvamento das edições será implementado posteriormente através de botões de ação específicos

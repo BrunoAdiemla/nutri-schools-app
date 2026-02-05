@@ -4,8 +4,9 @@ import { useToast } from '../hooks/useToast';
 import { ListaComprasService } from '../services/ListaComprasService';
 import { ListaCompras, ListaComprasItem } from '../types';
 import { logger } from '../utils/logger';
-import DeleteConfirmationModal from './DeleteConfirmationModal';
-import { initializeLucideIcons } from '../utils/lucideManager';
+import AddIngredientToListaModal from './AddIngredientToListaModal';
+import { formatQuantityWithUnit } from '../utils/unitConverter';
+import { PDFService } from '../services/PDFService';
 
 interface ListaComprasModalProps {
   isOpen: boolean;
@@ -24,30 +25,24 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
   const { showError, showSuccess } = useToast();
   const [lista, setLista] = useState<ListaCompras | null>(null);
   const [itens, setItens] = useState<ListaComprasItem[]>([]);
+  const [itensOriginais, setItensOriginais] = useState<ListaComprasItem[]>([]); // Estado original para comparação
+  const [itensParaAdicionar, setItensParaAdicionar] = useState<ListaComprasItem[]>([]); // Itens pendentes de adição
+  const [itensParaDeletar, setItensParaDeletar] = useState<string[]>([]); // IDs dos itens pendentes de deleção
   const [loading, setLoading] = useState(false);
-  const [updating, setUpdating] = useState<string | null>(null);
-  const [deleteModal, setDeleteModal] = useState<{
-    isOpen: boolean;
-    item: ListaComprasItem | null;
-    loading: boolean;
-  }>({
-    isOpen: false,
-    item: null,
-    loading: false
-  });
+  const [saving, setSaving] = useState(false);
+  const [addIngredientModalOpen, setAddIngredientModalOpen] = useState(false);
 
-  // Initialize Lucide icons
-  useEffect(() => {
-    if (isOpen) {
-      // Pequeno delay para garantir que o DOM está pronto
-      const timer = setTimeout(() => {
-        initializeLucideIcons();
-      }, 100);
-      return () => {
-        clearTimeout(timer);
-      };
-    }
-  }, [isOpen, itens.length, loading]);
+  // Initialize Lucide icons - desabilitado para evitar conflitos com React
+  // useEffect(() => {
+  //   if (isOpen && !loading && !saving) {
+  //     const timer = setTimeout(() => {
+  //       initializeLucideIcons();
+  //     }, 100);
+  //     return () => {
+  //       clearTimeout(timer);
+  //     };
+  //   }
+  // }, [isOpen, loading, saving, iconKey]);
 
   // Carregar dados quando o modal abrir
   useEffect(() => {
@@ -66,11 +61,9 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
       if (result.success && result.lista && result.itens) {
         setLista(result.lista);
         setItens(result.itens);
-        
-        // Re-inicializar ícones após carregar dados
-        setTimeout(() => {
-          initializeLucideIcons();
-        }, 150);
+        setItensOriginais(JSON.parse(JSON.stringify(result.itens))); // Deep copy para comparação
+        setItensParaAdicionar([]); // Limpar itens pendentes
+        setItensParaDeletar([]); // Limpar deleções pendentes
       } else {
         showError('Erro', result.error || 'Não foi possível carregar a lista de compras');
       }
@@ -82,12 +75,20 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
     }
   };
 
-  const handleQuantidadeChange = async (itemId: string, novaQuantidade: string) => {
-    if (!profile) return;
+  const handleUnidadeMedidaCompraChange = (itemId: string, novaUnidade: string) => {
+    // Atualizar apenas localmente, sem salvar no banco de dados
+    setItens(prev => 
+      prev.map(item => 
+        item.id === itemId 
+          ? { ...item, unidade_medida_compra: novaUnidade } 
+          : item
+      )
+    );
+  };
 
+  const handleQuantidadeAjustadaChange = (itemId: string, novaQuantidade: string) => {
+    // Atualizar apenas localmente, sem salvar no banco de dados
     const quantidade = novaQuantidade === '' ? null : parseFloat(novaQuantidade);
-    
-    // Atualizar localmente primeiro para responsividade
     setItens(prev => 
       prev.map(item => 
         item.id === itemId 
@@ -95,67 +96,142 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
           : item
       )
     );
-
-    // Atualizar no servidor
-    setUpdating(itemId);
-    try {
-      const result = await ListaComprasService.atualizarQuantidadeItem(itemId, quantidade, profile.id);
-      
-      if (!result.success) {
-        // Reverter mudança local se falhou no servidor
-        setItens(prev => 
-          prev.map(item => 
-            item.id === itemId 
-              ? { ...item, quantidade_ajustada: item.quantidade_ajustada } 
-              : item
-          )
-        );
-        showError('Erro', result.error || 'Não foi possível atualizar a quantidade');
-      }
-    } catch (error) {
-      logger.error('[ListaComprasModal] Erro ao atualizar quantidade:', error);
-      showError('Erro', 'Erro inesperado ao atualizar quantidade');
-    } finally {
-      setUpdating(null);
-    }
   };
 
   const handleDeleteItem = (item: ListaComprasItem) => {
     if (!item) return;
-    setDeleteModal({
-      isOpen: true,
-      item,
-      loading: false
-    });
-  };
-
-  const confirmDeleteItem = async () => {
-    if (!deleteModal.item || !profile) return;
-
-    setDeleteModal(prev => ({ ...prev, loading: true }));
-
-    try {
-      const result = await ListaComprasService.deletarItemListaCompras(deleteModal.item.id, profile.id);
-      
-      if (result.success) {
-        // Remover item da lista local
-        setItens(prev => prev.filter(item => item.id !== deleteModal.item!.id));
-        showSuccess('Sucesso', 'Item removido da lista de compras');
-        setDeleteModal({ isOpen: false, item: null, loading: false });
-      } else {
-        showError('Erro', result.error || 'Não foi possível remover o item');
-        setDeleteModal(prev => ({ ...prev, loading: false }));
-      }
-    } catch (error) {
-      logger.error('[ListaComprasModal] Erro ao deletar item:', error);
-      showError('Erro', 'Erro inesperado ao remover item');
-      setDeleteModal(prev => ({ ...prev, loading: false }));
+    
+    // Verificar se é um item novo (pendente de adição) ou um item existente
+    const isNewItem = itensParaAdicionar.some(i => i.id === item.id);
+    
+    if (isNewItem) {
+      // Se é um item novo, apenas remover da lista de itens para adicionar
+      setItensParaAdicionar(prev => prev.filter(i => i.id !== item.id));
+      setItens(prev => prev.filter(i => i.id !== item.id));
+    } else {
+      // Se é um item existente, marcar para deleção
+      setItensParaDeletar(prev => [...prev, item.id]);
+      // Remover visualmente da lista
+      setItens(prev => prev.filter(i => i.id !== item.id));
     }
   };
 
-  const closeDeleteModal = () => {
-    if (!deleteModal.loading) {
-      setDeleteModal({ isOpen: false, item: null, loading: false });
+  const handleAddIngredientSuccess = (novoItem: ListaComprasItem) => {
+    // Adicionar item à lista de pendentes
+    setItensParaAdicionar(prev => [...prev, novoItem]);
+    setItens(prev => [...prev, novoItem]);
+  };
+
+  // Verificar se há alterações pendentes
+  const hasChanges = () => {
+    // Verificar se há itens para adicionar ou deletar
+    if (itensParaAdicionar.length > 0 || itensParaDeletar.length > 0) {
+      return true;
+    }
+
+    // Verificar se há mudanças nos campos editáveis
+    for (const item of itens) {
+      const original = itensOriginais.find(o => o.id === item.id);
+      if (!original) continue;
+
+      if (item.quantidade_ajustada !== original.quantidade_ajustada ||
+          item.unidade_medida_compra !== original.unidade_medida_compra) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Salvar todas as alterações
+  const handleSaveChanges = async () => {
+    if (!profile || !lista) return;
+
+    setSaving(true);
+    try {
+      // 1. Deletar itens marcados para deleção
+      for (const itemId of itensParaDeletar) {
+        const result = await ListaComprasService.deletarItemListaCompras(itemId, profile.id);
+        if (!result.success) {
+          throw new Error(`Erro ao deletar item: ${result.error}`);
+        }
+      }
+
+      // 2. Adicionar novos itens
+      for (const novoItem of itensParaAdicionar) {
+        // Buscar o item atualizado do estado atual (pode ter sido editado)
+        const itemAtualizado = itens.find(i => i.id === novoItem.id);
+        
+        if (itemAtualizado) {
+          // Usar os valores atualizados do estado
+          const itemParaSalvar = {
+            ...novoItem,
+            quantidade_ajustada: itemAtualizado.quantidade_ajustada,
+            unidade_medida_compra: itemAtualizado.unidade_medida_compra
+          };
+          
+          const result = await ListaComprasService.adicionarItemListaCompras(itemParaSalvar, profile.id);
+          if (!result.success) {
+            throw new Error(`Erro ao adicionar item: ${result.error}`);
+          }
+        }
+      }
+
+      // 3. Atualizar itens modificados
+      for (const item of itens) {
+        const original = itensOriginais.find(o => o.id === item.id);
+        if (!original) continue;
+
+        const quantidadeChanged = item.quantidade_ajustada !== original.quantidade_ajustada;
+        const unidadeChanged = item.unidade_medida_compra !== original.unidade_medida_compra;
+
+        if (quantidadeChanged) {
+          const result = await ListaComprasService.atualizarQuantidadeItem(
+            item.id,
+            item.quantidade_ajustada ?? null,
+            profile.id
+          );
+          if (!result.success) {
+            throw new Error(`Erro ao atualizar quantidade: ${result.error}`);
+          }
+        }
+
+        if (unidadeChanged) {
+          const result = await ListaComprasService.atualizarUnidadeMedidaCompra(
+            item.id,
+            item.unidade_medida_compra || '',
+            profile.id
+          );
+          if (!result.success) {
+            throw new Error(`Erro ao atualizar unidade de medida: ${result.error}`);
+          }
+        }
+      }
+
+      // Recarregar dados após salvar
+      await loadListaCompras();
+      showSuccess('Sucesso', 'Alterações salvas com sucesso');
+    } catch (error) {
+      logger.error('[ListaComprasModal] Erro ao salvar alterações:', error);
+      showError('Erro', error instanceof Error ? error.message : 'Erro ao salvar alterações');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Gerar PDF da lista de compras
+  const handleGerarPDF = () => {
+    if (!lista || !profile) {
+      showError('Erro', 'Dados da lista não disponíveis');
+      return;
+    }
+
+    try {
+      PDFService.gerarListaComprasPDF(lista, itens, profile);
+      showSuccess('Sucesso', 'PDF gerado com sucesso');
+    } catch (error) {
+      logger.error('[ListaComprasModal] Erro ao gerar PDF:', error);
+      showError('Erro', 'Não foi possível gerar o PDF');
     }
   };
 
@@ -175,23 +251,13 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
               </h2>
               <p className="text-xs md:text-sm text-slate-600 mt-1">
                 📊 {itens.length} ingredientes
-                {lista?.status && (
-                  <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
-                    lista.status === 'rascunho' ? 'bg-yellow-100 text-yellow-800' :
-                    lista.status === 'finalizada' ? 'bg-green-100 text-green-800' :
-                    'bg-blue-100 text-blue-800'
-                  }`}>
-                    {lista.status === 'rascunho' ? 'Rascunho' :
-                     lista.status === 'finalizada' ? 'Finalizada' : 'Comprada'}
-                  </span>
-                )}
               </p>
             </div>
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
             >
-              <i data-lucide="x" className="w-5 h-5"></i>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
 
@@ -204,12 +270,33 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
               </div>
             ) : itens.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-slate-500">
-                <i data-lucide="shopping-cart" className="w-12 h-12 mb-4"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-4"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
                 <p className="text-lg font-medium">Nenhum item encontrado</p>
                 <p className="text-sm">Esta lista de compras está vazia.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                {/* Barra de ações superior */}
+                <div className="mb-4 flex justify-between items-center">
+                  <button
+                    onClick={() => setAddIngredientModalOpen(true)}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                    Adicionar Ingrediente
+                  </button>
+                  
+                  <button
+                    onClick={handleGerarPDF}
+                    disabled={loading || itens.length === 0}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    Gerar PDF
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-200">
@@ -217,13 +304,13 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
                         Ingrediente
                       </th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
-                        Unidade
-                      </th>
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
                         Qtd. Calculada
                       </th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
                         Qtd. Ajustada
+                      </th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
+                        Medida da compra
                       </th>
                       <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">
                         Ações
@@ -237,10 +324,7 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
                           <div className="font-medium text-slate-900">{item.ingrediente_nome || 'Ingrediente sem nome'}</div>
                         </td>
                         <td className="py-3 px-4 text-slate-600">
-                          {item.unidade_medida}
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">
-                          {item.quantidade_calculada?.toFixed(2) || '0.00'}{item.unidade_medida || ''}
+                          {formatQuantityWithUnit(item.quantidade_calculada, item.unidade_medida)}
                         </td>
                         <td className="py-3 px-4">
                           <input
@@ -248,16 +332,23 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
                             step="0.01"
                             min="0"
                             value={item.quantidade_ajustada ?? ''}
-                            onChange={(e) => handleQuantidadeChange(item.id, e.target.value)}
-                            disabled={updating === item.id}
-                            className="w-24 px-2 py-1 border border-slate-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
+                            onChange={(e) => handleQuantidadeAjustadaChange(item.id, e.target.value)}
+                            className="w-24 px-2 py-1 border border-slate-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
                             placeholder="0.00"
                           />
-                          {updating === item.id && (
-                            <div className="inline-block ml-2">
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                            </div>
-                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <select
+                            value={item.unidade_medida_compra || ''}
+                            onChange={(e) => handleUnidadeMedidaCompraChange(item.id, e.target.value)}
+                            className="w-24 px-2 py-1 border border-slate-300 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                          >
+                            <option value="">-</option>
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                            <option value="l">l</option>
+                            <option value="ml">ml</option>
+                          </select>
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
@@ -266,7 +357,7 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
                               className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                               title="Remover item da lista"
                             >
-                              <i data-lucide="trash-2" className="w-4 h-4"></i>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                             </button>
                           </div>
                         </td>
@@ -275,6 +366,7 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
 
@@ -282,23 +374,29 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
           <div className="p-4 md:p-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-sm text-slate-600">
               {itens.length > 0 ? `Exibindo ${itens.length} ingredientes` : 'Nenhum item'}
+              {hasChanges() && (
+                <span className="ml-2 text-orange-600 font-medium">
+                  • Alterações não salvas
+                </span>
+              )}
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
               <button
-                onClick={() => showSuccess('Funcionalidade em desenvolvimento', 'Salvar rascunho será implementado em breve')}
-                disabled={loading}
+                onClick={handleSaveChanges}
+                disabled={loading || saving || !hasChanges()}
                 className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <i data-lucide="save" className="w-4 h-4"></i>
-                Salvar Rascunho
-              </button>
-              <button
-                onClick={() => showSuccess('Funcionalidade em desenvolvimento', 'Gerar PDF será implementado em breve')}
-                disabled={loading}
-                className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <i data-lucide="file-text" className="w-4 h-4"></i>
-                Gerar PDF
+                {saving ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600"></div>
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    Salvar alterações
+                  </>
+                )}
               </button>
               <button
                 onClick={onClose}
@@ -311,16 +409,13 @@ const ListaComprasModal: React.FC<ListaComprasModalProps> = ({
         </div>
       </div>
 
-      {/* Modal de Confirmação de Exclusão */}
-      {deleteModal.isOpen && (
-        <DeleteConfirmationModal
-          isOpen={deleteModal.isOpen}
-          onClose={closeDeleteModal}
-          onConfirm={confirmDeleteItem}
-          title="Remover Item da Lista"
-          message="Tem certeza que deseja remover este ingrediente da lista de compras?"
-          itemName={deleteModal.item?.ingrediente_nome}
-          loading={deleteModal.loading}
+      {/* Modal Adicionar Ingrediente */}
+      {addIngredientModalOpen && lista && (
+        <AddIngredientToListaModal
+          isOpen={addIngredientModalOpen}
+          onClose={() => setAddIngredientModalOpen(false)}
+          listaComprasId={lista.id}
+          onSuccess={handleAddIngredientSuccess}
         />
       )}
     </>

@@ -13,13 +13,14 @@ const INGREDIENT_TYPES: { value: IngredienteTipo; label: string }[] = [
   { value: 'leguminosas', label: 'Leguminosas' },
   { value: 'cereais-e-derivados', label: 'Cereais e Derivados' },
   { value: 'tuberculos-e-raizes', label: 'Tubérculos e Raízes' },
-  { value: 'hortalicas', label: 'Hortaliças' },
+  { value: 'verduras-hortalicas-derivados', label: 'Verduras, Hortaliças e Derivados' },
   { value: 'oleos-gorduras-oleaginosas', label: 'Óleos, Gorduras e Oleaginosas' },
   { value: 'acucares-e-doces', label: 'Açúcares e Doces' },
   { value: 'bebidas', label: 'Bebidas' },
   { value: 'condimentos-e-temperos', label: 'Condimentos e Temperos' },
   { value: 'frutas', label: 'Frutas' },
-  { value: 'paes-e-biscoitos', label: 'Pães e Biscoitos' }
+  { value: 'paes-e-biscoitos', label: 'Pães e Biscoitos' },
+  { value: 'pescados-frutos-do-mar', label: 'Pescados e Frutos do Mar' }
 ];
 
 const IngredientsPage: React.FC = () => {

@@ -185,7 +185,7 @@ export class ListaComprasService {
         ingrediente_nome: item.ingrediente_nome,
         unidade_medida: item.unidade_medida,
         quantidade_calculada: item.quantidade_total,
-        quantidade_ajustada: item.quantidade_total, // Inicializar com o mesmo valor da quantidade calculada
+        quantidade_ajustada: null, // Deixar vazio para o usuário editar posteriormente
         fator_correcao_aplicado: item.fator_correcao,
         detalhes_calculo: item.detalhes_calculo
       }));
@@ -324,6 +324,99 @@ export class ListaComprasService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erro desconhecido ao atualizar item'
+      };
+    }
+  }
+
+  /**
+   * Atualiza a unidade de medida de compra de um item da lista
+   */
+  static async atualizarUnidadeMedidaCompra(itemId: string, unidadeMedidaCompra: string, userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      logger.log(`[ListaComprasService] Atualizando unidade de medida de compra do item: ${itemId}`);
+
+      // Verificar se o usuário tem permissão para editar este item
+      const { data: item, error: checkError } = await supabase
+        .from('lista_compras_itens')
+        .select(`
+          id,
+          lista_compras_id,
+          listas_compras!inner(created_by)
+        `)
+        .eq('id', itemId)
+        .single();
+
+      if (checkError || !item) {
+        throw new Error('Item não encontrado ou sem permissão');
+      }
+
+      if ((item as any).listas_compras.created_by !== userId) {
+        throw new Error('Sem permissão para editar este item');
+      }
+
+      // Atualizar a unidade de medida de compra
+      const { error: updateError } = await supabase
+        .from('lista_compras_itens')
+        .update({ unidade_medida_compra: unidadeMedidaCompra })
+        .eq('id', itemId);
+
+      if (updateError) {
+        throw new Error(`Erro ao atualizar unidade de medida: ${updateError.message}`);
+      }
+
+      logger.log(`[ListaComprasService] Unidade de medida de compra atualizada com sucesso`);
+      return { success: true };
+
+    } catch (error) {
+      logger.error('[ListaComprasService] Erro ao atualizar unidade de medida:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido ao atualizar unidade de medida'
+      };
+    }
+  }
+
+  /**
+   * Adiciona um item manualmente à lista de compras
+   */
+  static async adicionarItemListaCompras(item: any, userId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      logger.log(`[ListaComprasService] Adicionando item à lista: ${item.ingrediente_nome}`);
+
+      // Verificar se o usuário tem permissão para adicionar a esta lista
+      const { data: lista, error: checkError } = await supabase
+        .from('listas_compras')
+        .select('created_by')
+        .eq('id', item.lista_compras_id)
+        .single();
+
+      if (checkError || !lista) {
+        throw new Error('Lista de compras não encontrada ou sem permissão');
+      }
+
+      if (lista.created_by !== userId) {
+        throw new Error('Sem permissão para adicionar itens a esta lista');
+      }
+
+      // Adicionar o item (removendo o ID temporário)
+      const { id, ...itemSemId } = item;
+      
+      const { error: insertError } = await supabase
+        .from('lista_compras_itens')
+        .insert([itemSemId]);
+
+      if (insertError) {
+        throw new Error(`Erro ao adicionar item: ${insertError.message}`);
+      }
+
+      logger.log(`[ListaComprasService] Item adicionado com sucesso`);
+      return { success: true };
+
+    } catch (error) {
+      logger.error('[ListaComprasService] Erro ao adicionar item:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido ao adicionar item'
       };
     }
   }
